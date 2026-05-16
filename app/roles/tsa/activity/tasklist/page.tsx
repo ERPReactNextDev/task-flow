@@ -183,7 +183,7 @@ function DashboardContent() {
                                 target_quota={userDetails.target_quota}
                                 dateCreatedFilterRange={dateCreatedFilterRange}
                                 setDateCreatedFilterRangeAction={setDateCreatedFilterRangeAction}
-                                initialSearch={querySearch} />
+                                />
                         </div>
                     </main>
                 </SidebarInset>
