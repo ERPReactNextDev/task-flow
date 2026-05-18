@@ -87,7 +87,6 @@ const data = {
         { name: "Active", url: "/roles/admin/companies/active", icon: BookOpen },
         { name: "Group / Industry", url: "/roles/admin/companies/group", icon: Users },
         { name: "Pending Transferred", url: "/roles/admin/companies/transfer", icon: BookOpen },
-        { name: "Account Approval", url: "/roles/admin/companies/approval", icon: Trash2 },
       ],
     },
     {
