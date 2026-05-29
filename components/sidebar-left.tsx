@@ -393,7 +393,12 @@ export function SidebarLeft(props: React.ComponentProps<typeof Sidebar>) {
         />
 
         <NavSecondary
-          items={data.navSecondary}
+          items={data.navSecondary.filter((item) => {
+            if (item.url === "/roles/admin/settings") {
+              return userDetails.Role === "SuperAdmin" || userDetails.Role === "Manager";
+            }
+            return true;
+          })}
           className="mt-auto"
         />
       </SidebarContent>

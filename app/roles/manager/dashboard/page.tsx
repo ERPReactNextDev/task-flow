@@ -12,7 +12,7 @@ import {
 import { RefreshCcw, Loader2, List } from "lucide-react";
 import { sileo } from "sileo";
 import { useUser } from "@/contexts/UserContext";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { UserProvider } from "@/contexts/UserContext";
 import { FormatProvider } from "@/contexts/FormatContext";
 import { SidebarLeft } from "@/components/sidebar-left";
@@ -149,6 +149,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const { userId, setUserId } = useUser();
   const queryUserId = searchParams?.get("id") ?? "";
+  const router = useRouter();
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -238,7 +239,11 @@ function DashboardContent() {
   });
 
   // ── Agent-specific states ────────────────────────────────────────────────
-  const [agentUsers, setAgentUsers] = useState<Array<{ Firstname: string; Lastname: string; ReferenceID: string; Position: string; Status: string }>>([]);
+  const [agentUsers, setAgentUsers] = useState<Array<{
+  Firstname: string; Lastname: string; ReferenceID: string;
+  Position: string; Status: string;
+  TSM?: string; Tsm?: string; tsm?: string;
+}>>([]);
   const [selectedAgentRefId, setSelectedAgentRefId] = useState<string>("");
   const [loadingAgentUsers, setLoadingAgentUsers] = useState(false);
 
@@ -428,32 +433,67 @@ function DashboardContent() {
 
   // ── TSM-specific fetch helpers ────────────────────────────────────────────
 
+  // Fetch TSA agents under this TSM, then aggregate their cluster accounts
   const fetchTsmClusterData = useCallback(async (refId: string) => {
     if (!refId) return;
     try {
-      const res = await fetch(`/api/com-fetch-cluster-account-tsm?tsm=${encodeURIComponent(refId)}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const active: any[] = (data.data || []).filter((a: any) => (a.status || "").toLowerCase() === "active");
-      const countByType = (val: string) =>
-        active.filter((a) => (a.type_client || "").trim().toLowerCase() === val).length;
-      setDenominators((prev) => ({
-        ...prev,
-        total: active.length,
-        top50: countByType("top 50"),
-        next30: countByType("next 30"),
-        bal20: countByType("balance 20"),
-        csrClient: countByType("csr client"),
-        newClient: countByType("new client"),
-        tsaClient: countByType("tsa client"),
-      }));
-      setClusterAccounts(
-        active.map((a) => ({
+      // Step 1 — get all active TSA agents under this TSM
+      const agentRes = await fetch(`/api/activity/tsm/breaches/fetch-agent?id=${encodeURIComponent(refId)}`);
+      if (!agentRes.ok) throw new Error("Failed to fetch agents");
+      const agentData: { ReferenceID: string; Status: string }[] = await agentRes.json();
+      const activeAgents = agentData.filter((a) => (a.Status || "").toLowerCase() === "active");
+
+      if (activeAgents.length === 0) {
+        setClusterAccounts([]);
+        setDenominators((prev) => ({ ...prev, total: 0, top50: 0, next30: 0, bal20: 0, csrClient: 0, newClient: 0, tsaClient: 0 }));
+        return;
+      }
+
+      // Step 2 — fetch cluster accounts for each TSA in parallel
+      const excludedStatuses = ["removed", "approved for deletion", "subject for transfer"];
+      const allowedTypes = ["top 50", "next 30", "balance 20", "tsa client", "csr client", "new client"];
+
+      const results = await Promise.all(
+        activeAgents.map((agent) =>
+          fetch(`/api/com-fetch-cluster-account?referenceid=${encodeURIComponent(agent.ReferenceID)}`)
+            .then((r) => r.ok ? r.json() : { data: [] })
+            .then((d) => (d.data || []) as any[])
+            .catch(() => [] as any[])
+        )
+      );
+
+      // Step 3 — flatten, filter, normalize
+      const allAccounts: Activity[] = results
+        .flat()
+        .filter((a: any) => {
+          const status = (a.status || "").toLowerCase();
+          const typeClient = (a.type_client || "").toLowerCase();
+          if (!a.status || !a.type_client) return false;
+          if (excludedStatuses.includes(status)) return false;
+          if (!allowedTypes.includes(typeClient)) return false;
+          return true;
+        })
+        .map((a: any) => ({
           account_reference_number: a.account_reference_number,
           company_name: a.company_name,
           type_client: (a.type_client || "").toLowerCase().replace(/\s+/g, ""),
-        }))
-      );
+        }));
+
+      const countByType = (val: string) =>
+        allAccounts.filter((a) => a.type_client === val).length;
+
+      setDenominators((prev) => ({
+        ...prev,
+        total: allAccounts.length,
+        top50: countByType("top50"),
+        next30: countByType("next30"),
+        bal20: countByType("balance20"),
+        csrClient: countByType("csrclient"),
+        newClient: countByType("newclient"),
+        tsaClient: countByType("tsaclient"),
+      }));
+
+      setClusterAccounts(allAccounts);
     } catch { /* silent */ }
   }, []);
 
@@ -461,7 +501,7 @@ function DashboardContent() {
     if (!refId) return;
     setLoadingActivities(true);
     try {
-      const res = await fetch(`/api/activity/manager/breaches/fetch-activity-tsm?tsm=${encodeURIComponent(refId)}`);
+      const res = await fetch(`/api/activity/manager/breaches/fetch-activity-tsm?tsm=${encodeURIComponent(refId)}&fetchAll=true`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setActivities(data.activities || []);
@@ -598,7 +638,7 @@ function DashboardContent() {
     if (!refId) return;
     setLoadingActivities(true);
     try {
-      const res = await fetch(`/api/activity/tsa/breaches/fetch?referenceid=${encodeURIComponent(refId)}`);
+      const res = await fetch(`/api/activity/tsa/breaches/fetch?referenceid=${encodeURIComponent(refId)}&fetchAll=true`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setActivities(data.activities || []);
@@ -901,8 +941,17 @@ function DashboardContent() {
     }
   }, [activities, fromDate, toDate, tsmFromDate, tsmToDate, agentFromDate, agentToDate, userDetails.referenceid, totalAgents, workingDays, activeTab, agentsByTsm, selectedRefId, selectedAgentRefId]);
 
-  // ── Territory coverage ────────────────────────────────────────────────────
-  // ✅ UPDATED: Uses correct tab dates + exact from–to range (not full month)
+  // ── Territory coverage ────────────────────────────────────────────────────────────────────────────
+  //
+  // Scope: the selected date range for the active tab.
+  // - "Covered"     = cluster accounts whose company_name matches ANY activity
+  //                   company_name within that range (case-insensitive,
+  //                   trailing dots stripped, whitespace collapsed).
+  // - "Not Reached" = the rest
+
+  // Normalize a company name: lowercase → collapse whitespace → strip trailing dot(s)
+  const normalizeCompany = (name: string): string =>
+    (name || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\.+$/, "");
 
   useEffect(() => {
     if (!clusterAccounts.length) {
@@ -914,27 +963,22 @@ function DashboardContent() {
       return;
     }
 
-    // Pick the correct date range based on which tab is active
     const currentFromDate = activeTab === "manager" ? fromDate : activeTab === "tsm" ? tsmFromDate : agentFromDate;
-    const currentToDate = activeTab === "manager" ? toDate : activeTab === "tsm" ? tsmToDate : agentToDate;
+    const currentToDate   = activeTab === "manager" ? toDate   : activeTab === "tsm" ? tsmToDate   : agentToDate;
 
     const rangeStart = new Date(currentFromDate); rangeStart.setHours(0, 0, 0, 0);
-    const rangeEnd = new Date(currentToDate); rangeEnd.setHours(23, 59, 59, 999);
+    const rangeEnd   = new Date(currentToDate);   rangeEnd.setHours(23, 59, 59, 999);
 
-    const activityKeySet = new Set<string>();
+    // Step 1 — collect normalized company names touched within the range
+    const touchedCompanyNames = new Set<string>();
     const byActivityRef: Record<string, any> = {};
 
     activities.forEach((act) => {
-      if (!act.date_created) return;
+      if (!act.company_name || !act.date_created) return;
       const t = new Date(act.date_created).getTime();
-      // Filter by exact from–to range
       if (isNaN(t) || t < rangeStart.getTime() || t > rangeEnd.getTime()) return;
 
-      if (act.account_reference_number) {
-        activityKeySet.add(act.account_reference_number.toLowerCase());
-      } else if (act.company_name) {
-        activityKeySet.add(`name:${act.company_name.toLowerCase()}`);
-      }
+      touchedCompanyNames.add(normalizeCompany(act.company_name));
 
       if (act.activity_reference_number) {
         byActivityRef[act.activity_reference_number] = act;
@@ -943,22 +987,23 @@ function DashboardContent() {
 
     setUniqueActivitiesList(Object.values(byActivityRef));
 
-    const getAccountKey = (acc: Activity): string => {
-      if (acc.account_reference_number) return acc.account_reference_number.toLowerCase();
-      return `name:${(acc.company_name ?? "").toLowerCase()}`;
-    };
-
-    const covered = clusterAccounts.filter((acc) => activityKeySet.has(getAccountKey(acc)));
-    const uncovered = clusterAccounts.filter((acc) => !activityKeySet.has(getAccountKey(acc)));
+    // Step 2 — covered / uncovered split by normalized company_name
+    const covered = clusterAccounts.filter((acc) =>
+      acc.company_name && touchedCompanyNames.has(normalizeCompany(acc.company_name))
+    );
+    const uncovered = clusterAccounts.filter((acc) =>
+      !acc.company_name || !touchedCompanyNames.has(normalizeCompany(acc.company_name))
+    );
 
     setCoveredAccounts(covered);
     setUncoveredAccounts(uncovered);
 
+    // Step 3 — segment counts from covered cluster accounts
     const seg = { top50: 0, next30: 0, balance20: 0, csrClient: 0, newClient: 0, tsaClient: 0 };
     covered.forEach((acc) => {
       const type = acc.type_client ?? "";
-      if (type === "top50") seg.top50++;
-      else if (type === "next30") seg.next30++;
+      if      (type === "top50")     seg.top50++;
+      else if (type === "next30")    seg.next30++;
       else if (type === "balance20") seg.balance20++;
       else if (type === "csrclient") seg.csrClient++;
       else if (type === "newclient") seg.newClient++;
@@ -967,12 +1012,7 @@ function DashboardContent() {
 
     setUniqueClientReach(covered.length);
     setClientSegments({ ...seg, outbound: covered.length });
-  }, [
-    activities,
-    clusterAccounts,
-    fromDate, toDate,
-    tsmFromDate, tsmToDate,
-    agentFromDate, agentToDate,
+  }, [activities, fromDate, toDate, tsmFromDate, tsmToDate, agentFromDate, agentToDate,
     activeTab,
   ]);
 
@@ -1060,6 +1100,24 @@ function DashboardContent() {
       });
     }
   };
+
+  const buildCompaniesUrl = (activity: "with" | "without"): string => {
+  const params = new URLSearchParams();
+  if (userId) params.set("id", userId);
+
+  if (activeTab === "tsm" && selectedRefId) {
+    params.set("tsm", selectedRefId);
+    // No agent selected yet — companies page will land at TSAs level for this TSM
+  } else if (activeTab === "agent" && selectedAgentRefId) {
+    const agentUser = agentUsers.find((a) => a.ReferenceID === selectedAgentRefId);
+    const tsmRef = agentUser?.TSM || agentUser?.Tsm || agentUser?.tsm || "";
+    if (tsmRef) params.set("tsm", tsmRef);
+    params.set("agent", selectedAgentRefId);
+  }
+
+  params.set("activity", activity);
+  return `/roles/manager/companies/all?${params.toString()}`;
+};
 
   const dailyPct = denominators.daily > 0
     ? Math.min(100, Math.round((outboundDaily / denominators.daily) * 100))

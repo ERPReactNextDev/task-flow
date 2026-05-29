@@ -103,6 +103,12 @@ function getFirstWeekday(year: number, month: number) {
   return new Date(year, month, 1).getDay();
 }
 
+function isMeetingType(type?: string): boolean {
+  if (!type) return false;
+  const t = type.toLowerCase();
+  return t === "meeting" || t === "client meeting" || t === "group meeting";
+}
+
 function groupByHour(items: CCGItem[]): Record<number, CCGItem[]> {
   const map: Record<number, CCGItem[]> = {};
   for (let i = 0; i < 24; i++) map[i] = [];
@@ -114,7 +120,7 @@ function groupByHour(items: CCGItem[]): Record<number, CCGItem[]> {
     if (!start && !end) return;
     
     // For meetings with both start and end, show in all hours they span
-    if (start && end && it.type_activity === "Meeting") {
+    if (start && end && isMeetingType(it.type_activity)) {
       const startHour = start.getHours();
       const endHour = end.getHours();
       
@@ -188,7 +194,7 @@ const EventCard: React.FC<{
   agentName?: string;
   agentPicture?: string;
 }> = ({ ev, agentName, agentPicture }) => {
-  const isMeeting = ev.type_activity === "Meeting" && ev.start_date && ev.end_date;
+  const isMeeting = isMeetingType(ev.type_activity) && !!ev.start_date && !!ev.end_date;
   const statusClass =
     STATUS_STYLES[ev.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const duration = formatDuration(ev.start_date, ev.end_date);

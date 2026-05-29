@@ -259,7 +259,7 @@ export default function TSAReports() {
     if (!refId) return;
     setLoadingActivities(true);
     try {
-      const res = await fetch(`/api/activity/tsa/breaches/fetch?referenceid=${encodeURIComponent(refId)}`);
+      const res = await fetch(`/api/activity/tsa/breaches/fetch?referenceid=${encodeURIComponent(refId)}&fetchAll=true`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setActivities(data.activities || []);
@@ -479,13 +479,15 @@ export default function TSAReports() {
 
   // ── Territory coverage ────────────────────────────────────────────────────
   //
-  // Scope: the FULL calendar month of fromDate (month start → month end).
-  // - "Covered"     = cluster accounts whose account_reference_number appears in ANY
-  //                   activity within that month range
+  // Scope: the FULL calendar month of startDate (month start → month end).
+  // - "Covered"     = cluster accounts whose company_name matches ANY activity
+  //                   company_name within that month range (case-insensitive,
+  //                   trailing dots stripped, whitespace collapsed).
   // - "Not Reached" = the rest
-  // - NO source filter — isOutboundTouchbase applies only to the Outbound
-  //   Performance card, NOT to coverage counts.
-  // - Denominators come from clusterAccounts, not activities.
+
+  // Normalize a company name: lowercase → collapse whitespace → strip trailing dot(s)
+  const normalizeCompany = (name: string): string =>
+    (name || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\.+$/, "");
 
   useEffect(() => {
     if (!clusterAccounts.length) {
@@ -497,31 +499,24 @@ export default function TSAReports() {
       return;
     }
 
-    // Explicit month bounds from fromDate (use UTC to avoid timezone issues)
-    const fromDateObj = new Date(startDate + "T00:00:00Z"); // Treat as UTC
+    const fromDateObj = new Date(startDate + "T00:00:00Z");
     const year = fromDateObj.getUTCFullYear();
     const month = fromDateObj.getUTCMonth();
-    // Month start: 1st of month at 00:00:00 UTC
     const monthStart = Date.UTC(year, month, 1, 0, 0, 0, 0);
-    // Month end: last day of month at 23:59:59.999 UTC
     const monthEnd = Date.UTC(year, month + 1, 0, 23, 59, 59, 999);
 
-    // Step 1 — account_reference_numbers with ANY activity within calendar month
-    const touchedAccountRefs = new Set<string>();
+    const touchedCompanyNames = new Set<string>();
     const byActivityRef: Record<string, any> = {};
 
     activities.forEach((act) => {
-      if (!act.account_reference_number || !act.date_created) return;
-      // Parse date_created as literal date (ignore timezone)
-      const dateStr = act.date_created.toString().split('T')[0]; // "2026-03-31" from "2026-03-31T10:30:00Z"
-      const [y, m, d] = dateStr.split('-').map(Number);
+      if (!act.company_name || !act.date_created) return;
+      const dateStr = act.date_created.toString().split("T")[0];
+      const [y, m, d] = dateStr.split("-").map(Number);
       if (!y || !m || !d) return;
-      // Create UTC timestamp from literal date components (treat as midnight UTC)
       const t = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
-
       if (isNaN(t) || t < monthStart || t > monthEnd) return;
 
-      touchedAccountRefs.add(act.account_reference_number);
+      touchedCompanyNames.add(normalizeCompany(act.company_name));
 
       if (act.activity_reference_number) {
         byActivityRef[act.activity_reference_number] = act;
@@ -530,23 +525,21 @@ export default function TSAReports() {
 
     setUniqueActivitiesList(Object.values(byActivityRef));
 
-    // Step 2 — covered / uncovered split by account_reference_number
     const covered = clusterAccounts.filter((acc) =>
-      acc.account_reference_number && touchedAccountRefs.has(acc.account_reference_number)
+      acc.company_name && touchedCompanyNames.has(normalizeCompany(acc.company_name))
     );
     const uncovered = clusterAccounts.filter((acc) =>
-      !acc.account_reference_number || !touchedAccountRefs.has(acc.account_reference_number)
+      !acc.company_name || !touchedCompanyNames.has(normalizeCompany(acc.company_name))
     );
 
     setCoveredAccounts(covered);
     setUncoveredAccounts(uncovered);
 
-    // Step 3 — segment counts from covered cluster accounts
     const seg = { top50: 0, next30: 0, balance20: 0, csrClient: 0, newClient: 0, tsaClient: 0 };
     covered.forEach((acc) => {
       const type = acc.type_client ?? "";
-      if (type === "top50") seg.top50++;
-      else if (type === "next30") seg.next30++;
+      if      (type === "top50")     seg.top50++;
+      else if (type === "next30")    seg.next30++;
       else if (type === "balance20") seg.balance20++;
       else if (type === "csrclient") seg.csrClient++;
       else if (type === "newclient") seg.newClient++;

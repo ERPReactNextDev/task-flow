@@ -128,6 +128,10 @@ export default function TSMReports() {
   const [clusterAccounts, setClusterAccounts] = useState<Activity[]>([]);
   const [uniqueActivitiesList, setUniqueActivitiesList] = useState<Activity[]>([]);
 
+  // TSA agents under this TSM (used for per-TSA cluster fetch)
+  const [tsaAgents, setTsaAgents] = useState<{ ReferenceID: string; Firstname: string; Lastname: string }[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(false);
+
   // Loading states
   const [loadingUser, setLoadingUser] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -230,37 +234,73 @@ export default function TSMReports() {
 
   // ── Fetch helpers ─────────────────────────────────────────────────────────
 
+  // Fetch agents under this TSM, then fetch each TSA's cluster accounts
   const fetchClusterData = useCallback(async (refId: string) => {
     if (!refId) return;
+    setLoadingAgents(true);
     try {
-      const res = await fetch(`/api/com-fetch-cluster-account-tsm?tsm=${encodeURIComponent(refId)}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const active = (data.data || []).filter((a: any) => (a.status || "").toLowerCase() === "active");
+      // Step 1 — get all active TSA agents under this TSM
+      const agentRes = await fetch(`/api/activity/tsm/breaches/fetch-agent?id=${encodeURIComponent(refId)}`);
+      if (!agentRes.ok) throw new Error("Failed to fetch agents");
+      const agentData: { ReferenceID: string; Firstname: string; Lastname: string; Status: string }[] = await agentRes.json();
+      const activeAgents = agentData.filter((a) => (a.Status || "").toLowerCase() === "active");
+      setTsaAgents(activeAgents);
 
-      const countByType = (val: string) =>
-        active.filter((a: any) => (a.type_client || "").trim().toLowerCase() === val).length;
+      if (activeAgents.length === 0) {
+        setClusterAccounts([]);
+        setDenominators((prev) => ({ ...prev, total: 0, top50: 0, next30: 0, bal20: 0, csrClient: 0, newClient: 0, tsaClient: 0 }));
+        return;
+      }
 
-      setDenominators((prev) => ({
-        ...prev,
-        total: active.length,
-        top50: countByType("top 50"),
-        next30: countByType("next 30"),
-        bal20: countByType("balance 20"),
-        csrClient: countByType("csr client"),
-        newClient: countByType("new client"),
-        tsaClient: countByType("tsa client"),
-      }));
+      // Step 2 — fetch cluster accounts for each TSA in parallel
+      const excludedStatuses = ["removed", "approved for deletion", "subject for transfer"];
+      const allowedTypes = ["top 50", "next 30", "balance 20", "tsa client", "csr client", "new client"];
 
-      setClusterAccounts(
-        active.map((a: any) => ({
+      const results = await Promise.all(
+        activeAgents.map((agent) =>
+          fetch(`/api/com-fetch-cluster-account?referenceid=${encodeURIComponent(agent.ReferenceID)}`)
+            .then((r) => r.ok ? r.json() : { data: [] })
+            .then((d) => (d.data || []) as any[])
+            .catch(() => [] as any[])
+        )
+      );
+
+      // Step 3 — flatten, filter, normalize
+      const allAccounts: Activity[] = results
+        .flat()
+        .filter((a: any) => {
+          const status = (a.status || "").toLowerCase();
+          const typeClient = (a.type_client || "").toLowerCase();
+          if (!a.status || !a.type_client) return false;
+          if (excludedStatuses.includes(status)) return false;
+          if (!allowedTypes.includes(typeClient)) return false;
+          return true;
+        })
+        .map((a: any) => ({
           account_reference_number: a.account_reference_number,
           company_name: a.company_name,
           type_client: (a.type_client || "").toLowerCase().replace(/\s+/g, ""),
-        }))
-      );
+        }));
+
+      const countByType = (val: string) =>
+        allAccounts.filter((a) => a.type_client === val).length;
+
+      setDenominators((prev) => ({
+        ...prev,
+        total: allAccounts.length,
+        top50: countByType("top50"),
+        next30: countByType("next30"),
+        bal20: countByType("balance20"),
+        csrClient: countByType("csrclient"),
+        newClient: countByType("newclient"),
+        tsaClient: countByType("tsaclient"),
+      }));
+
+      setClusterAccounts(allAccounts);
     } catch {
-      sileo.error({ title: "Error", description: "Failed to fetch cluster.", duration: 4000, position: "top-center" });
+      sileo.error({ title: "Error", description: "Failed to fetch cluster data.", duration: 4000, position: "top-center" });
+    } finally {
+      setLoadingAgents(false);
     }
   }, []);
 
@@ -268,7 +308,7 @@ export default function TSMReports() {
     if (!refId) return;
     setLoadingActivities(true);
     try {
-      const res = await fetch(`/api/activity/tsm/breaches/fetch?tsm=${encodeURIComponent(refId)}`);
+      const res = await fetch(`/api/activity/tsm/breaches/fetch?tsm=${encodeURIComponent(refId)}&fetchAll=true`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setActivities(data.activities || []);
@@ -489,15 +529,20 @@ export default function TSMReports() {
     }
   }, [activities, startDate, endDate, userDetails.referenceid, totalAgents, workingDays]);
 
-  // ── Territory coverage ────────────────────────────────────────────────────
+  // ── Territory coverage ────────────────────────────────────────────────────────────────────────────
   //
   // Scope: the FULL calendar month of startDate (month start → month end).
-  // - "Covered"     = cluster accounts whose account_reference_number appears in ANY
-  //                   activity within that month range
+  // - "Covered"     = cluster accounts whose company_name matches ANY activity
+  //                   company_name within that month range (case-insensitive,
+  //                   trailing dots stripped, whitespace collapsed).
+  //                   Accounts with the same normalized name count as ONE,
+  //                   regardless of different account_reference_numbers.
   // - "Not Reached" = the rest
-  // - NO source filter — isOutboundTouchbase applies only to the Outbound
-  //   Touchbase Performance card, NOT to coverage counts.
-  // - Denominators come from clusterAccounts, not activities.
+  // - Denominators come from clusterAccounts (no dedup — matches Account Mgmt).
+
+  // Normalize a company name: lowercase → collapse whitespace → strip trailing dot(s)
+  const normalizeCompany = (name: string): string =>
+    (name || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\.+$/, "");
 
   useEffect(() => {
     if (!clusterAccounts.length) {
@@ -509,20 +554,21 @@ export default function TSMReports() {
       return;
     }
 
+    // Month bounds (local time)
     const startDateObj = new Date(startDate);
     const monthStart = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), 1, 0, 0, 0, 0).getTime();
-    const monthEnd = new Date(startDateObj.getFullYear(), startDateObj.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    const monthEnd   = new Date(startDateObj.getFullYear(), startDateObj.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
 
-    // Step 1 — account_reference_numbers with ANY activity within the calendar month
-    const touchedAccountRefs = new Set<string>();
+    // Step 1 — collect normalized company names touched within the month
+    const touchedCompanyNames = new Set<string>();
     const byActivityRef: Record<string, any> = {};
 
     activities.forEach((act) => {
-      if (!act.account_reference_number || !act.date_created) return;
+      if (!act.company_name || !act.date_created) return;
       const t = new Date(act.date_created).getTime();
       if (isNaN(t) || t < monthStart || t > monthEnd) return;
 
-      touchedAccountRefs.add(act.account_reference_number);
+      touchedCompanyNames.add(normalizeCompany(act.company_name));
 
       if (act.activity_reference_number) {
         byActivityRef[act.activity_reference_number] = act;
@@ -531,23 +577,25 @@ export default function TSMReports() {
 
     setUniqueActivitiesList(Object.values(byActivityRef));
 
-    // Step 2 — covered / uncovered split by account_reference_number
+    // Step 2 — covered / uncovered split by normalized company_name
+    // Each cluster account row is evaluated independently (no dedup on accounts),
+    // but matching is done by company name so "ABC Corp" and "ABC Corp." both match.
     const covered = clusterAccounts.filter((acc) =>
-      acc.account_reference_number && touchedAccountRefs.has(acc.account_reference_number)
+      acc.company_name && touchedCompanyNames.has(normalizeCompany(acc.company_name))
     );
     const uncovered = clusterAccounts.filter((acc) =>
-      !acc.account_reference_number || !touchedAccountRefs.has(acc.account_reference_number)
+      !acc.company_name || !touchedCompanyNames.has(normalizeCompany(acc.company_name))
     );
 
     setCoveredAccounts(covered);
     setUncoveredAccounts(uncovered);
 
-    // Step 5 — Compute segment counts for covered only
+    // Step 3 — segment counts from covered cluster accounts
     const seg = { top50: 0, next30: 0, balance20: 0, csrClient: 0, newClient: 0, tsaClient: 0 };
-    covered.forEach(acc => {
+    covered.forEach((acc) => {
       const type = acc.type_client ?? "";
-      if (type === "top50") seg.top50++;
-      else if (type === "next30") seg.next30++;
+      if      (type === "top50")     seg.top50++;
+      else if (type === "next30")    seg.next30++;
       else if (type === "balance20") seg.balance20++;
       else if (type === "csrclient") seg.csrClient++;
       else if (type === "newclient") seg.newClient++;

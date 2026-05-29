@@ -241,29 +241,63 @@ export default function TSMReports() {
   const fetchClusterData = useCallback(async (refId: string) => {
     if (!refId) return;
     try {
-      const res = await fetch(`/api/com-fetch-cluster-account-tsm?tsm=${encodeURIComponent(refId)}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const active: any[] = (data.data || []).filter((a: any) => (a.status || "").toLowerCase() === "active");
-      const countByType = (val: string) =>
-        active.filter((a) => (a.type_client || "").trim().toLowerCase() === val).length;
-      setDenominators((prev) => ({
-        ...prev,
-        total: active.length,
-        top50: countByType("top 50"),
-        next30: countByType("next 30"),
-        bal20: countByType("balance 20"),
-        csrClient: countByType("csr client"),
-        newClient: countByType("new client"),
-        tsaClient: countByType("tsa client"),
-      }));
-      setClusterAccounts(
-        active.map((a) => ({
+      // Step 1 — get all active TSA agents under this TSM
+      const agentRes = await fetch(`/api/activity/tsm/breaches/fetch-agent?id=${encodeURIComponent(refId)}`);
+      if (!agentRes.ok) throw new Error("Failed to fetch agents");
+      const agentData: { ReferenceID: string; Firstname: string; Lastname: string; Status: string }[] = await agentRes.json();
+      const activeAgents = agentData.filter((a) => (a.Status || "").toLowerCase() === "active");
+
+      if (activeAgents.length === 0) {
+        setClusterAccounts([]);
+        setDenominators((prev) => ({ ...prev, total: 0, top50: 0, next30: 0, bal20: 0, csrClient: 0, newClient: 0, tsaClient: 0 }));
+        return;
+      }
+
+      // Step 2 — fetch cluster accounts for each TSA in parallel
+      const excludedStatuses = ["removed", "approved for deletion", "subject for transfer"];
+      const allowedTypes = ["top 50", "next 30", "balance 20", "tsa client", "csr client", "new client"];
+
+      const results = await Promise.all(
+        activeAgents.map((agent) =>
+          fetch(`/api/com-fetch-cluster-account?referenceid=${encodeURIComponent(agent.ReferenceID)}`)
+            .then((r) => r.ok ? r.json() : { data: [] })
+            .then((d) => (d.data || []) as any[])
+            .catch(() => [] as any[])
+        )
+      );
+
+      // Step 3 — flatten, filter, normalize
+      const allAccounts: Activity[] = results
+        .flat()
+        .filter((a: any) => {
+          const status = (a.status || "").toLowerCase();
+          const typeClient = (a.type_client || "").toLowerCase();
+          if (!a.status || !a.type_client) return false;
+          if (excludedStatuses.includes(status)) return false;
+          if (!allowedTypes.includes(typeClient)) return false;
+          return true;
+        })
+        .map((a: any) => ({
           account_reference_number: a.account_reference_number,
           company_name: a.company_name,
           type_client: (a.type_client || "").toLowerCase().replace(/\s+/g, ""),
-        }))
-      );
+        }));
+
+      const countByType = (val: string) =>
+        allAccounts.filter((a) => a.type_client === val).length;
+
+      setDenominators((prev) => ({
+        ...prev,
+        total: allAccounts.length,
+        top50: countByType("top50"),
+        next30: countByType("next30"),
+        bal20: countByType("balance20"),
+        csrClient: countByType("csrclient"),
+        newClient: countByType("newclient"),
+        tsaClient: countByType("tsaclient"),
+      }));
+
+      setClusterAccounts(allAccounts);
     } catch { /* silent */ }
   }, []);
 
@@ -271,7 +305,7 @@ export default function TSMReports() {
     if (!refId) return;
     setLoadingActivities(true);
     try {
-      const res = await fetch(`/api/activity/manager/breaches/fetch-activity-tsm?tsm=${encodeURIComponent(refId)}`);
+      const res = await fetch(`/api/activity/manager/breaches/fetch-activity-tsm?tsm=${encodeURIComponent(refId)}&fetchAll=true`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setActivities(data.activities || []);
@@ -496,10 +530,15 @@ export default function TSMReports() {
 
   // ── Territory coverage ────────────────────────────────────────────────────
   //
-  // FIX: activeClusterNames is the source of truth — only companies that exist
-  // in clusterAccounts (already filtered to active) are considered.
-  // Activities whose company_name is NOT in the current cluster are excluded
-  // from coverage counts entirely.
+  // Scope: the FULL calendar month of startDate (month start → month end).
+  // - "Covered"     = cluster accounts whose company_name matches ANY activity
+  //                   company_name within that month range (case-insensitive,
+  //                   trailing dots stripped, whitespace collapsed).
+  // - "Not Reached" = the rest
+
+  // Normalize a company name: lowercase → collapse whitespace → strip trailing dot(s)
+  const normalizeCompany = (name: string): string =>
+    (name || "").toLowerCase().replace(/\s+/g, " ").trim().replace(/\.+$/, "");
 
   useEffect(() => {
     if (!clusterAccounts.length) {
@@ -511,48 +550,47 @@ export default function TSMReports() {
       return;
     }
 
-    const fromDateObj = new Date(startDate);
-    const monthStart = new Date(fromDateObj.getFullYear(), fromDateObj.getMonth(), 1, 0, 0, 0, 0).getTime();
-    const monthEnd = new Date(fromDateObj.getFullYear(), fromDateObj.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+    const fromDateObj = new Date(startDate + "T00:00:00Z");
+    const year = fromDateObj.getUTCFullYear();
+    const month = fromDateObj.getUTCMonth();
+    const monthStart = Date.UTC(year, month, 1, 0, 0, 0, 0);
+    const monthEnd = Date.UTC(year, month + 1, 0, 23, 59, 59, 999);
 
-    // Step 1 — Build a map of active cluster companies (source of truth)
-    const clusterCompanyMap = new Map<string, Activity>();
-    clusterAccounts.forEach((acc) => {
-      if (acc.company_name) clusterCompanyMap.set(acc.company_name.toLowerCase(), acc);
+    const touchedCompanyNames = new Set<string>();
+    const byActivityRef: Record<string, any> = {};
+
+    activities.forEach((act) => {
+      if (!act.company_name || !act.date_created) return;
+      const dateStr = act.date_created.toString().split("T")[0];
+      const [y, m, d] = dateStr.split("-").map(Number);
+      if (!y || !m || !d) return;
+      const t = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+      if (isNaN(t) || t < monthStart || t > monthEnd) return;
+
+      touchedCompanyNames.add(normalizeCompany(act.company_name));
+
+      if (act.activity_reference_number) {
+        byActivityRef[act.activity_reference_number] = act;
+      }
     });
 
-    // Step 2 — Filter activities:
-    //   (a) company_name must exist in current clusterCompanyMap (active cluster only)
-    //   (b) date_created must be within the month range
-    const clusterActivities = activities.filter((act) =>
-      act.company_name &&
-      clusterCompanyMap.has(act.company_name.toLowerCase()) && // ← FIX: exclude companies no longer in cluster
-      act.date_created &&
-      new Date(act.date_created).getTime() >= monthStart &&
-      new Date(act.date_created).getTime() <= monthEnd
+    setUniqueActivitiesList(Object.values(byActivityRef));
+
+    const covered = clusterAccounts.filter((acc) =>
+      acc.company_name && touchedCompanyNames.has(normalizeCompany(acc.company_name))
     );
-
-    // Step 3 — Unique activities by reference number
-    const uniqueByRef: Record<string, Activity> = {};
-    clusterActivities.forEach((act) => {
-      if (act.activity_reference_number) uniqueByRef[act.activity_reference_number] = act;
-    });
-    setUniqueActivitiesList(Object.values(uniqueByRef));
-
-    // Step 4 — Covered vs Uncovered (based on active cluster only)
-    const touchedCompanies = new Set(clusterActivities.map((a) => a.company_name!.toLowerCase()));
-    const covered = clusterAccounts.filter((acc) => acc.company_name && touchedCompanies.has(acc.company_name.toLowerCase()));
-    const uncovered = clusterAccounts.filter((acc) => acc.company_name && !touchedCompanies.has(acc.company_name.toLowerCase()));
+    const uncovered = clusterAccounts.filter((acc) =>
+      !acc.company_name || !touchedCompanyNames.has(normalizeCompany(acc.company_name))
+    );
 
     setCoveredAccounts(covered);
     setUncoveredAccounts(uncovered);
 
-    // Step 5 — Segment counts for covered accounts only
     const seg = { top50: 0, next30: 0, balance20: 0, csrClient: 0, newClient: 0, tsaClient: 0 };
     covered.forEach((acc) => {
       const type = acc.type_client ?? "";
-      if (type === "top50") seg.top50++;
-      else if (type === "next30") seg.next30++;
+      if      (type === "top50")     seg.top50++;
+      else if (type === "next30")    seg.next30++;
       else if (type === "balance20") seg.balance20++;
       else if (type === "csrclient") seg.csrClient++;
       else if (type === "newclient") seg.newClient++;
