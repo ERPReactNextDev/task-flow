@@ -227,6 +227,7 @@ type SpfCreationRow = {
   project_lead_time?: string | null;
   manager?: string | null;
   item_code?: string | null;
+  product_name?: string | null;
   referenceid?: string | null;
   [key: string]: any;
 };
@@ -305,6 +306,7 @@ function spfSummarizeField(value?: string | null, max = 2): string {
 }
 function parseSpfCreationProducts(row: SpfCreationRow): SpfOfferProduct[] {
   const skus = spfExplodeRowGroups(row.item_code);
+  const productNames = spfExplodeRowGroups(row.product_name);
   const qtys = spfExplodeRowGroups(row.product_offer_qty);
   const sellingPrices = spfExplodeRowGroups(row.final_selling_cost);
   const leadRaw = row.proj_lead_time ?? row.project_lead_time;
@@ -314,18 +316,25 @@ function parseSpfCreationProducts(row: SpfCreationRow): SpfOfferProduct[] {
   const packaging = spfExplodeRowGroups(row.product_offer_packaging_details);
   const factory = spfExplodeRowGroups(row.product_offer_factory_address);
   const maxLen = skus.length || Math.max(qtys.length, sellingPrices.length, leadTimes.length, imgs.length, 1);
-  return Array.from({ length: maxLen }, (_, i) => ({
-    title: (skus[i] || `SPF ITEM ${i + 1}`).toUpperCase(),
-    sku: (skus[i] || skus[0] || "").toUpperCase(),
-    quantity: Math.max(0, parseInt(qtys[i] || "0", 10) || 0),
-    finalSellingPrice: Math.max(0, parseFloat(sellingPrices[i] || "0") || 0),
-    imageUrl: imgs[i] || "",
-    technicalSpecification: techSpecs[i] || "",
-    packagingDetails: packaging[i] || "",
-    factoryDetails: factory[i] || "",
-    url: "",
-    leadTime: leadTimes[i] || leadTimes[0] || "",
-  })).filter((p) => p.sku.trim().length > 0);
+  return Array.from({ length: maxLen }, (_, i) => {
+    // Use product_name if available, otherwise fallback to item code
+    const productName = (productNames[i] || "").trim();
+    const itemCode = (skus[i] || "").trim();
+    const displayTitle = (productName && productName !== "-") ? productName : (itemCode || `SPF ITEM ${i + 1}`);
+    
+    return {
+      title: displayTitle.toUpperCase(),
+      sku: (itemCode || skus[0] || "").toUpperCase(),
+      quantity: Math.max(0, parseInt(qtys[i] || "0", 10) || 0),
+      finalSellingPrice: Math.max(0, parseFloat(sellingPrices[i] || "0") || 0),
+      imageUrl: imgs[i] || "",
+      technicalSpecification: techSpecs[i] || "",
+      packagingDetails: packaging[i] || "",
+      factoryDetails: factory[i] || "",
+      url: "",
+      leadTime: leadTimes[i] || leadTimes[0] || "",
+    };
+  }).filter((p) => p.sku.trim().length > 0);
 }
 function escapeHtmlSpf(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -3546,9 +3555,14 @@ ${payload.whtType && payload.whtType !== "none"
                                               <div className="w-12 h-12 bg-gray-50 border border-gray-200 shrink-0" />
                                             )}
                                             <div className="flex-1 min-w-0">
-                                              <div className="text-[10px] font-black uppercase tracking-wider text-gray-800 truncate font-mono">
-                                                {p.sku || p.title}
+                                              <div className="text-[10px] font-black uppercase tracking-wider text-gray-800 truncate">
+                                                {p.title}
                                               </div>
+                                              {p.sku && p.sku.trim().length > 0 && p.sku.trim().toUpperCase() !== (p.title || "").trim().toUpperCase() ? (
+                                                <div className="text-[9px] text-gray-500 truncate font-mono">
+                                                  {p.sku}
+                                                </div>
+                                              ) : null}
                                               <div className="text-[10px] text-gray-500 mt-0.5 grid grid-cols-2 gap-x-2">
                                                 <span className="truncate"><span className="font-bold">Min qty:</span> {p.quantity}</span>
                                                 <span className="truncate"><span className="font-bold">Price:</span> ₱{p.finalSellingPrice.toFixed(2)}</span>
@@ -3565,8 +3579,8 @@ ${payload.whtType && payload.whtType !== "none"
                                                 const specHtml = formatSpfTechSpecToHtml(p.technicalSpecification || "");
                                                 const leadHtml = formatProcurementLeadHtml(p.leadTime || "");
                                                 const newProduct: any = {
-                                                  title: p.sku ? p.sku.toUpperCase() : p.title,
-                                                  product_title: p.sku ? p.sku.toUpperCase() : p.title,
+                                                  title: p.title,
+                                                  product_title: p.title,
                                                   product_description: `${specHtml}${leadHtml}`,
                                                   description: `${specHtml}${leadHtml}`,
                                                   product_sku: p.sku || "",

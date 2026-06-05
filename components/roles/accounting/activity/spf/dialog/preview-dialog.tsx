@@ -168,6 +168,19 @@ const parseSpec = (raw: string): SpecCategory[] => {
     .filter(Boolean) as SpecCategory[];
 };
 
+const getBaseItemCode = (itemCode: string) => {
+  const c = (itemCode || "").trim().toUpperCase();
+  if (!c || c === "-") return "";
+  const m = c.match(/^(.*)-([A-Z])$/);
+  return m ? m[1] : c;
+};
+
+const getOptionSuffix = (itemCode: string) => {
+  const c = (itemCode || "").trim().toUpperCase();
+  const m = c.match(/-([A-Z])$/);
+  return m ? m[1] : "";
+};
+
 const parseOfferRows = (row: SPFCreationRow): OfferProduct[][] => {
   const f = parseField2D;
   const images = parseImageField2D(row.product_offer_image);
@@ -224,6 +237,27 @@ const parseOfferRows = (row: SPFCreationRow): OfferProduct[][] => {
       final_selling: rSell[pi] ?? "",
     }));
   });
+};
+
+const getOfferProductsForItem = (offer: SPFCreationRow, itemIndex: number, itemRowCode: string) => {
+  const offerRows = parseOfferRows(offer);
+  const flat = offerRows.flat();
+
+  if (itemRowCode && itemRowCode !== "-") {
+    const matches = flat
+      .filter((p) => getBaseItemCode(p.item_code) === itemRowCode.toUpperCase())
+      .slice()
+      .sort((a, b) => {
+        const ar = getOptionSuffix(a.item_code);
+        const br = getOptionSuffix(b.item_code);
+        const ai = ar ? ar.charCodeAt(0) : 999;
+        const bi = br ? br.charCodeAt(0) : 999;
+        return ai - bi;
+      });
+    if (matches.length > 0) return matches;
+  }
+
+  return offerRows[itemIndex] || [];
 };
 
 export function SPFPreviewDialog({ open, onClose, currentSPF }: Props) {
@@ -360,10 +394,13 @@ export function SPFPreviewDialog({ open, onClose, currentSPF }: Props) {
               {/* RIGHT: Item Comparisons (Requested vs Offers) */}
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {requestedItems.map((reqItem, itemIndex) => {
-                  const itemOffers = offers.map((offer) => {
-                    const offerRows = parseOfferRows(offer);
-                    return offerRows[itemIndex] || [];
-                  }).flat();
+                  const itemRowCode = currentSPF?.spf_number
+                    ? `${currentSPF.spf_number}-${String(itemIndex + 1).padStart(3, "0")}`
+                    : "-";
+
+                  const itemOffers = offers
+                    .map((offer) => getOfferProductsForItem(offer, itemIndex, itemRowCode))
+                    .flat();
                   
                   return (
                     <div key={itemIndex} style={{ background: "#fff", borderRadius: "6px", border: "1px solid #e5e7eb", overflow: "hidden" }}>
@@ -377,6 +414,12 @@ export function SPFPreviewDialog({ open, onClose, currentSPF }: Props) {
                             Qty: {reqItem.item_qty}
                           </span>
                         )}
+                        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ ...F, fontSize: "10px", fontWeight: 800, color: "#475569", border: "1px solid #cbd5e1", background: "#ffffff", padding: "3px 8px", borderRadius: "4px" }}>
+                            {itemRowCode}
+                          </span>
+                          {itemRowCode !== "-" && <CopyButton text={itemRowCode} />}
+                        </div>
                       </div>
 
                       {/* Item Body */}
@@ -384,9 +427,17 @@ export function SPFPreviewDialog({ open, onClose, currentSPF }: Props) {
                         {/* Requested Item */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "0px" }}>
                           <div style={{ background: "#f0fdf4", borderRadius: "6px", padding: "12px", border: "1px solid #86efac", height: "100%" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
-                              <FileCheck style={{ width: "12px", height: "12px", color: "#059669" }} />
-                              <span style={{ ...F, fontSize: "10px", fontWeight: 800, color: "#065f46", letterSpacing: "0.12em", textTransform: "uppercase" }}>Requested</span>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", marginBottom: "10px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <FileCheck style={{ width: "12px", height: "12px", color: "#059669" }} />
+                                <span style={{ ...F, fontSize: "10px", fontWeight: 800, color: "#065f46", letterSpacing: "0.12em", textTransform: "uppercase" }}>Requested</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ ...F, fontSize: "10px", fontWeight: 800, color: "#065f46", border: "1px solid #86efac", background: "#ffffff", padding: "2px 8px", borderRadius: "4px" }}>
+                                  {itemRowCode}
+                                </span>
+                                {itemRowCode !== "-" && <CopyButton text={itemRowCode} />}
+                              </div>
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                               {reqItem.item_photo && (
@@ -439,7 +490,7 @@ export function SPFPreviewDialog({ open, onClose, currentSPF }: Props) {
                             </div>
                           ) : (
                             offers.map((offer, offerIndex) => {
-                              const offerRow = parseOfferRows(offer)[itemIndex];
+                              const offerRow = getOfferProductsForItem(offer, itemIndex, itemRowCode);
                               if (!offerRow || offerRow.length === 0) return null;
                               return (
                                 <div key={offer.id} style={{ border: "1px solid #e5e7eb", borderRadius: "6px", overflow: "hidden" }}>
