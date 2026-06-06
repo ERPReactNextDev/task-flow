@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
         .from("ticket_conversations")
         .select("ticket_id")
         .in("ticket_id", ticketIds)
-        .eq("sender", "bot")
+        .neq("sender", "user")
         .eq("is_seen", false);
 
       if (unseenData) {

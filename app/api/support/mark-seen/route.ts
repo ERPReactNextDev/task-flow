@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       .from("ticket_conversations")
       .update({ is_seen: true })
       .eq("ticket_id", ticket_id)
-      .eq("sender", "bot")
+      .neq("sender", "user")
       .eq("is_seen", false);
 
     if (error) throw error;

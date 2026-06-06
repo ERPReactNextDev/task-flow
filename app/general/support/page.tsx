@@ -317,7 +317,7 @@ function SupportContent() {
         table: "ticket_conversations",
       }, (payload) => {
         const msg = payload.new as ConversationMessage & { ticket_id: string };
-        if (!msg || msg.sender !== "bot") return;
+        if (!msg || msg.sender === "user") return;
         if (!ticketIds.includes(msg.ticket_id)) return;
 
         // Only notify if not currently viewing that ticket
@@ -557,8 +557,8 @@ function SupportContent() {
           return [...prev, newMsg];
         });
 
-        // If it's a new bot message while viewing, mark it seen immediately
-        if (newMsg.sender === "bot") {
+        // If it's a new non-user message while viewing, mark it seen immediately
+        if (newMsg.sender !== "user") {
           fetch("/api/support/mark-seen", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
