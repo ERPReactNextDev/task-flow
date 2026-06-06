@@ -436,12 +436,20 @@ function SupportContent() {
     if ((!text && !attachedFile) || !viewingTicket) return;
     setReplyInput("");
 
-    // Optimistic message (text only, file shown after upload)
+    const fileToUpload = attachedFile;
+    clearAttachment();
+
+    const tempId = `temp-${Date.now()}`;
+
+    // Optimistic: add message immediately with text only
     const tempMsg: ConversationMessage = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       sender: "user",
       message: text,
       date_created: new Date().toISOString(),
+      file_url: null,
+      file_type: null,
+      file_name: null,
     };
     setViewingConversation((prev) => [...prev, tempMsg]);
     if (text) pendingMessages.current.add(text);
@@ -450,20 +458,28 @@ function SupportContent() {
     let file_type: "image" | "pdf" | null = null;
     let file_name: string | null = null;
 
-    if (attachedFile) {
+    if (fileToUpload) {
       setUploading(true);
-      clearAttachment();
       try {
         const fd = new FormData();
-        fd.append("file", attachedFile);
+        fd.append("file", fileToUpload);
         const res = await fetch("/api/cloudinary/upload-ticket", { method: "POST", body: fd });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Upload failed");
         file_url  = data.url;
         file_type = data.fileType;
         file_name = data.fileName;
+
+        // Update the optimistic message with the uploaded file
+        setViewingConversation((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? { ...m, file_url, file_type, file_name }
+              : m
+          )
+        );
       } catch {
-        // still send the text even if upload fails
+        // keep the text message even if upload fails
       } finally {
         setUploading(false);
       }
@@ -507,16 +523,37 @@ function SupportContent() {
         event: "INSERT", schema: "public", table: "ticket_conversations",
         filter: `ticket_id=eq.${viewingTicket.ticket_id}`,
       }, (payload) => {
-        const newMsg = payload.new as ConversationMessage;
+        const newMsg = payload.new as ConversationMessage & { ticket_id?: string };
         if (!newMsg) return;
         setViewingConversation((prev) => {
+          // Already have this DB row
           if (newMsg.id && prev.some((m) => m.id === newMsg.id)) return prev;
-          if (newMsg.sender === "user" && pendingMessages.current.has(newMsg.message)) {
+
+          // Replace matching optimistic user message (dedup by text)
+          if (newMsg.sender === "user" && newMsg.message && pendingMessages.current.has(newMsg.message)) {
             pendingMessages.current.delete(newMsg.message);
             return prev
               .filter((m) => !(typeof m.id === "string" && m.id.startsWith("temp-") && m.message === newMsg.message))
               .concat(newMsg);
           }
+
+          // If it's a realtime message that matches an optimistic entry by tempId pattern — replace it
+          // (covers file-only messages where message is empty)
+          if (newMsg.sender === "user") {
+            const tempMatch = prev.find(
+              (m) =>
+                typeof m.id === "string" &&
+                m.id.startsWith("temp-") &&
+                m.message === (newMsg.message ?? "") &&
+                !m.file_url && newMsg.file_url
+            );
+            if (tempMatch) {
+              return prev
+                .filter((m) => m.id !== tempMatch.id)
+                .concat(newMsg);
+            }
+          }
+
           return [...prev, newMsg];
         });
 
@@ -904,32 +941,64 @@ function SupportContent() {
                           </div>
                         )}
                         <div className="flex flex-col gap-0.5 max-w-[70%]">
-                          {/* File attachment */}
-                          {msg.file_url && msg.file_type === "image" && (
-                            <a href={msg.file_url} target="_blank" rel="noopener noreferrer" className="block">
+                          {/* Image attachment */}
+                          {msg.file_url && msg.file_url.length > 0 && (msg.file_type === "image" || (msg.file_type as string)?.startsWith("image/")) && (
+                            <div className={`rounded-xl overflow-hidden border ${msg.sender === "user" ? "border-indigo-400" : "border-slate-200"}`}>
                               <img
                                 src={msg.file_url}
                                 alt={msg.file_name ?? "attachment"}
-                                className={`rounded-xl max-w-full max-h-60 object-cover border ${
-                                  msg.sender === "user" ? "border-indigo-400" : "border-slate-200"
-                                }`}
+                                className="max-w-full max-h-60 object-cover w-full cursor-pointer"
+                                onClick={() => window.open(msg.file_url!, "_blank")}
                               />
-                            </a>
+                              <a
+                                href={`/api/support/download-file?url=${encodeURIComponent(msg.file_url!)}&name=${encodeURIComponent(msg.file_name ?? "image")}`}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold border-t transition-colors ${
+                                  msg.sender === "user"
+                                    ? "border-indigo-400 bg-indigo-500 text-white hover:bg-indigo-400"
+                                    : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                                }`}
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                <span className="truncate max-w-[160px]">{msg.file_name ?? "Download image"}</span>
+                              </a>
+                            </div>
                           )}
-                          {msg.file_url && msg.file_type === "pdf" && (
-                            <a
-                              href={msg.file_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
-                                msg.sender === "user"
-                                  ? "bg-indigo-500 border-indigo-400 text-white hover:bg-indigo-400"
-                                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                              }`}
-                            >
-                              <FileText size={14} className="shrink-0" />
-                              <span className="truncate max-w-[180px]">{msg.file_name ?? "attachment.pdf"}</span>
-                            </a>
+                          {/* PDF attachment */}
+                          {msg.file_url && msg.file_url.length > 0 && (msg.file_type === "pdf" || (msg.file_type as string) === "application/pdf") && (
+                            <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border ${
+                              msg.sender === "user"
+                                ? "bg-indigo-500 border-indigo-400"
+                                : "bg-white border-slate-200"
+                            }`}>
+                              <FileText size={16} className={`shrink-0 ${msg.sender === "user" ? "text-white" : "text-red-500"}`} />
+                              <span className={`text-[11px] font-semibold truncate flex-1 max-w-[160px] ${msg.sender === "user" ? "text-white" : "text-slate-700"}`}>
+                                {msg.file_name ?? "attachment.pdf"}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <a
+                                  href={msg.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wide transition-colors ${
+                                    msg.sender === "user"
+                                      ? "bg-white/20 hover:bg-white/30 text-white"
+                                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                                  }`}
+                                >
+                                  View
+                                </a>
+                                <a
+                                  href={`/api/support/download-file?url=${encodeURIComponent(msg.file_url!)}&name=${encodeURIComponent(msg.file_name ?? "attachment.pdf")}`}
+                                  className={`px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wide transition-colors ${
+                                    msg.sender === "user"
+                                      ? "bg-white/20 hover:bg-white/30 text-white"
+                                      : "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                                  }`}
+                                >
+                                  ↓
+                                </a>
+                              </div>
+                            </div>
                           )}
                           {/* Text message */}
                           {msg.message && (
