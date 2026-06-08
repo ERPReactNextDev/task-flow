@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   useReactTable,
@@ -118,166 +118,6 @@ const STATUS_STYLES: Record<string, string> = {
   inactive: "bg-red-100 text-red-800 border-red-200",
 };
 
-// ─── Audit log helper ─────────────────────────────────────────────────────────
-type AuditEventType =
-  | "table_viewed"
-  | "tab_hidden"
-  | "tab_visible"
-  | "window_blurred"
-  | "window_focused"
-  | "table_scrolled"
-  | "copy_attempted";
-
-// Session dedup — prevents firing the same one-shot events on re-renders
-const _sessionLogged = new Set<string>();
-
-async function sendAuditLog(
-  referenceid: string,
-  event_type: AuditEventType,
-  metadata: Record<string, unknown> = {},
-  opts: { once?: boolean } = {}
-) {
-  if (opts.once) {
-    const key = `${referenceid}:${event_type}`;
-    if (_sessionLogged.has(key)) return;
-    _sessionLogged.add(key);
-  }
-  try {
-    const res = await fetch("/api/screenshot-log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      keepalive: true,
-      body: JSON.stringify({
-        referenceid,
-        event_type,
-        page: "accounts-table",
-        metadata: {
-          ...metadata,
-          user_agent: navigator.userAgent,
-          timestamp: new Date().toISOString(),
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      console.error(`[audit-log] HTTP ${res.status} — ${event_type}:`, text);
-    } else {
-      console.log(`[audit-log] ✓ saved — ${event_type}`);
-    }
-  } catch (err) {
-    console.error(`[audit-log] fetch failed — ${event_type}:`, err);
-  }
-}
-
-// ─── Visible rows snapshot helper ────────────────────────────────────────────
-function getVisibleCompanyNames(tableEl: HTMLDivElement): string[] {
-  const viewportTop    = window.scrollY;
-  const viewportBottom = viewportTop + window.innerHeight;
-  const names: string[] = [];
-
-  const rows = tableEl.querySelectorAll("tbody tr");
-  rows.forEach((row) => {
-    const rect = row.getBoundingClientRect();
-    const absTop    = rect.top + window.scrollY;
-    const absBottom = rect.bottom + window.scrollY;
-    if (absBottom > viewportTop && absTop < viewportBottom) {
-      const nameEl = row.querySelector("td p.font-semibold");
-      if (nameEl?.textContent) names.push(nameEl.textContent.trim());
-    }
-  });
-  return names;
-}
-
-// ─── useAuditLogger hook ──────────────────────────────────────────────────────
-function useAuditLogger(
-  referenceid: string,
-  tableRef: React.RefObject<HTMLDivElement | null>,
-  suppressBlurRef: React.RefObject<boolean>
-) {
-  const lastScrollLog = useRef<number>(0);
-  const lastBlurAt    = useRef<number>(0);
-  const lastFocusAt   = useRef<number>(0);
-
-  useEffect(() => {
-    if (!referenceid) return;
-
-    // Fire once per session
-    sendAuditLog(referenceid, "table_viewed");
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        const visible = tableRef.current
-          ? getVisibleCompanyNames(tableRef.current)
-          : [];
-        sendAuditLog(referenceid, "tab_hidden", {
-          visible_companies: visible,
-          scroll_y: window.scrollY,
-        });
-      } else {
-        sendAuditLog(referenceid, "tab_visible");
-      }
-    };
-
-    const handleBlur = () => {
-      // ── REVISED: suppress blur for the entire duration any dialog is open ──
-      if (suppressBlurRef.current) return;
-
-      const now = Date.now();
-      if (now - lastBlurAt.current < 1000) return;
-      lastBlurAt.current = now;
-
-      const visible = tableRef.current
-        ? getVisibleCompanyNames(tableRef.current)
-        : [];
-
-      sendAuditLog(referenceid, "window_blurred", {
-        note: "Window lost focus — possible screenshot tool or Alt+Tab",
-        visible_companies: visible,
-        scroll_y: window.scrollY,
-        viewport_height: window.innerHeight,
-      });
-    };
-
-    const handleFocus = () => {
-      const now = Date.now();
-      if (now - lastFocusAt.current < 1000) return;
-      lastFocusAt.current = now;
-      sendAuditLog(referenceid, "window_focused");
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleBlur);
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [referenceid, tableRef]);
-
-  // Scroll — throttled to once per 5s
-  useEffect(() => {
-    const el = tableRef.current;
-    if (!el || !referenceid) return;
-
-    const handleScroll = () => {
-      const now = Date.now();
-      if (now - lastScrollLog.current < 5000) return;
-      lastScrollLog.current = now;
-      const visible = getVisibleCompanyNames(el);
-      sendAuditLog(referenceid, "table_scrolled", {
-        scroll_y: window.scrollY,
-        visible_companies: visible,
-      });
-    };
-
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, [referenceid, tableRef]);
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function AccountsTable({
   posts = [],
@@ -288,85 +128,8 @@ export function AccountsTable({
   const router = useRouter();
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // ── REVISED: Use a counter ref instead of a boolean + timeout ────────────
-  // suppressBlurRef is true whenever openDialogCount > 0
-  const suppressBlurRef  = useRef<boolean>(false);
-  const openDialogCount  = useRef<number>(0);
-
-  // Call when opening ANY dialog
-  const onDialogOpen = useCallback(() => {
-    openDialogCount.current += 1;
-    suppressBlurRef.current = true;
-  }, []);
-
-  // Call when closing ANY dialog (onOpenChange receives false)
-  const onDialogClose = useCallback(() => {
-    openDialogCount.current = Math.max(0, openDialogCount.current - 1);
-    if (openDialogCount.current === 0) {
-      suppressBlurRef.current = false;
-    }
-  }, []);
-
   const [localPosts, setLocalPosts] = useState<Account[]>(posts);
   useEffect(() => setLocalPosts(posts), [posts]);
-
-  // ── Audit logging ─────────────────────────────────────────────────────────
-  useAuditLogger(userDetails.referenceid, tableRef, suppressBlurRef);
-
-  // ── Copy & screenshot protection ─────────────────────────────────────────
-  useEffect(() => {
-    const el = tableRef.current;
-    if (!el) return;
-
-    const handleCopy = (e: ClipboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      sendAuditLog(userDetails.referenceid, "copy_attempted", {
-        note: "Ctrl+C or copy blocked",
-      });
-    };
-
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const ctrl = e.ctrlKey || e.metaKey;
-      if (ctrl && (e.key === "c" || e.key === "C")) {
-        e.preventDefault();
-        e.stopPropagation();
-        sendAuditLog(userDetails.referenceid, "copy_attempted", {
-          note: "Ctrl+C blocked",
-        });
-      }
-      if (ctrl && (e.key === "a" || e.key === "A")) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      if (ctrl && (e.key === "x" || e.key === "X")) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      if (e.key === "PrintScreen") {
-        e.preventDefault();
-        navigator.clipboard?.writeText("").catch(() => {});
-        sendAuditLog(userDetails.referenceid, "window_blurred", {
-          note: "PrintScreen key pressed",
-        });
-      }
-    };
-
-    el.addEventListener("copy", handleCopy);
-    el.addEventListener("contextmenu", handleContextMenu);
-    el.addEventListener("keydown", handleKeyDown, true);
-
-    return () => {
-      el.removeEventListener("copy", handleCopy);
-      el.removeEventListener("contextmenu", handleContextMenu);
-      el.removeEventListener("keydown", handleKeyDown, true);
-    };
-  }, [userDetails.referenceid]);
 
   // ── Table styles from API ─────────────────────────────────────────────────
   const [tableStyles, setTableStyles] = useState({
@@ -694,8 +457,6 @@ export function AccountsTable({
             className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 border border-zinc-200 transition-all group/edit"
             style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
             onClick={() => {
-              // ── REVISED: open dialog using onDialogOpen ──
-              onDialogOpen();
               setEditingAccount(row.original);
               setIsEditDialogOpen(true);
             }}
@@ -913,7 +674,7 @@ export function AccountsTable({
         },
       },
     ],
-    [activityCounts, onDialogOpen]
+    [activityCounts]
   );
 
   // ── Search debounce ───────────────────────────────────────────────────────
@@ -1266,7 +1027,7 @@ export function AccountsTable({
             {/* ── REVISED: onDialogOpen() instead of suppressNextBlur() ── */}
             <Button
               className="cursor-pointer h-8 text-xs font-semibold shrink-0 shadow-sm"
-              onClick={() => { onDialogOpen(); setIsCreateDialogOpen(true); }}
+              onClick={() => { setIsCreateDialogOpen(true); }}
               style={{
                 backgroundColor: tableStyles.toolbar_btn_bg,
                 color: tableStyles.toolbar_btn_text,
@@ -1330,7 +1091,7 @@ export function AccountsTable({
                   style={{
                     borderRadius: `${tableStyles.table_border_radius}px`,
                   }}
-                  onClick={() => { onDialogOpen(); setIsTransferDialogOpen(true); }}
+                  onClick={() => { setIsTransferDialogOpen(true); }}
                 >
                   <Repeat className="h-3.5 w-3.5 mr-1" /> Transfer
                 </Button>
@@ -1343,7 +1104,6 @@ export function AccountsTable({
                     borderRadius: `${tableStyles.table_border_radius}px`,
                   }}
                   onClick={async () => {
-                    onDialogOpen();
                     const ids = [...selectedAccountIds];
                     const accountsToArchive = localPosts.filter((acc) =>
                       ids.includes(acc.id)
@@ -1593,8 +1353,7 @@ export function AccountsTable({
         }}
         open={isCreateDialogOpen}
         onOpenChangeAction={(open) => {
-          if (!open) onDialogClose();
-          setIsCreateDialogOpen(open);
+                    setIsCreateDialogOpen(open);
         }}
       />
 
@@ -1646,7 +1405,6 @@ export function AccountsTable({
           // ── REVISED: onDialogClose when edit dialog closes ──
           onOpenChangeAction={(open) => {
             if (!open) {
-              onDialogClose();
               setEditingAccount(null);
               setIsEditDialogOpen(false);
             }
@@ -1658,8 +1416,7 @@ export function AccountsTable({
       <AccountsActiveDeleteDialog
         open={isRemoveDialogOpen}
         onOpenChange={(open) => {
-          if (!open) onDialogClose();
-          setIsRemoveDialogOpen(open);
+                    setIsRemoveDialogOpen(open);
         }}
         removeRemarks={removeRemarks}
         setRemoveRemarks={setRemoveRemarks}
@@ -1673,8 +1430,7 @@ export function AccountsTable({
       <TransferDialog
         open={isTransferDialogOpen}
         onOpenChange={(open) => {
-          if (!open) onDialogClose();
-          setIsTransferDialogOpen(open);
+                    setIsTransferDialogOpen(open);
         }}
         agents={agents}
         selectedAccountIds={selectedAccountIds}
