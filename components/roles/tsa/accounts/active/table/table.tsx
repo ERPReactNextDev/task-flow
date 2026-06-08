@@ -1024,7 +1024,6 @@ export function AccountsTable({
           }}
         >
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            {/* ── REVISED: onDialogOpen() instead of suppressNextBlur() ── */}
             <Button
               className="cursor-pointer h-8 text-xs font-semibold shrink-0 shadow-sm"
               onClick={() => { setIsCreateDialogOpen(true); }}
@@ -1343,7 +1342,6 @@ export function AccountsTable({
       </div>
 
       {/* ── Create dialog ─────────────────────────────────────────────────── */}
-      {/* ── REVISED: onDialogClose when dialog closes ── */}
       <AccountDialog
         mode="create"
         userDetails={userDetails}
@@ -1352,9 +1350,7 @@ export function AccountsTable({
           setIsCreateDialogOpen(false);
         }}
         open={isCreateDialogOpen}
-        onOpenChangeAction={(open) => {
-                    setIsCreateDialogOpen(open);
-        }}
+        onOpenChangeAction={setIsCreateDialogOpen}
       />
 
       {/* ── Edit dialog ───────────────────────────────────────────────────── */}
@@ -1402,7 +1398,6 @@ export function AccountsTable({
             setIsEditDialogOpen(false);
           }}
           open={isEditDialogOpen}
-          // ── REVISED: onDialogClose when edit dialog closes ──
           onOpenChangeAction={(open) => {
             if (!open) {
               setEditingAccount(null);
@@ -1412,12 +1407,10 @@ export function AccountsTable({
         />
       )}
 
-      {/* ── REVISED: onDialogClose when remove dialog closes ── */}
+      {/* ── Delete dialog ────────────────────────────────────────────────── */}
       <AccountsActiveDeleteDialog
         open={isRemoveDialogOpen}
-        onOpenChange={(open) => {
-                    setIsRemoveDialogOpen(open);
-        }}
+        onOpenChange={setIsRemoveDialogOpen}
         removeRemarks={removeRemarks}
         setRemoveRemarks={setRemoveRemarks}
         onConfirmRemove={handleBulkRemove}
@@ -1426,12 +1419,10 @@ export function AccountsTable({
         loadingHistoricalData={loadingHistoricalData}
       />
 
-      {/* ── REVISED: onDialogClose when transfer dialog closes ── */}
+      {/* ── Transfer dialog ──────────────────────────────────────────────── */}
       <TransferDialog
         open={isTransferDialogOpen}
-        onOpenChange={(open) => {
-                    setIsTransferDialogOpen(open);
-        }}
+        onOpenChange={setIsTransferDialogOpen}
         agents={agents}
         selectedAccountIds={selectedAccountIds}
         onConfirmTransfer={handleBulkTransfer}
