@@ -123,24 +123,19 @@ export interface AuditTrailData {
 }
 
 /**
- * Get user information from MongoDB by user ID
- * Uses dynamic import to avoid bundling MongoDB in client-side code
+ * Get user information from Supabase by user ID
  */
 export async function getUserInfo(userId: string) {
   try {
-    // Dynamic import to prevent client-side bundling of MongoDB
-    const { connectToDatabase } = await import("./mongodb");
-    const { ObjectId } = await import("mongodb");
+    const { supabase } = await import("@/utils/supabase");
     
-    if (!ObjectId.isValid(userId)) {
-      console.warn(`Invalid userId format for audit trail: ${userId}`);
-      return null;
-    }
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
 
-    const db = await connectToDatabase();
-    const user = await db.collection("users").findOne({ _id: new ObjectId(userId) });
-
-    if (!user) {
+    if (error || !user) {
       return null;
     }
 
@@ -153,7 +148,7 @@ export async function getUserInfo(userId: string) {
       referenceId: user.ReferenceID || "",
     };
   } catch (error) {
-    console.error("Error fetching user info for audit trail:", error);
+    console.error("Error fetching user info for audit trail from Supabase:", error);
     return null;
   }
 }

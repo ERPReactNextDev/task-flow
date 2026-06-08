@@ -294,21 +294,17 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       const result = await res.json();
       if (!res.ok) {
         if (result.locked) { setTicketDone(false); setShowTicketDialog(true); }
+        else if (result.timeLocked) {
+          sileo.warning({
+            title: "Access Restricted",
+            description: result.message || "Login is currently disabled during off-hours.",
+            duration: 4000,
+            position: "top-right",
+            fill: "black",
+            styles: { title: "text-white!", description: "text-white" }
+          });
+        }
         else { sileo.error({ title: "Login Failed", description: result.message || "Invalid credentials.", duration: 4000, position: "top-right", fill: "black", styles: { title: "text-white!", description: "text-white" } }); }
-        setLoading(false);
-        return;
-      }
-
-      // Check for time lock bypass (Managers only)
-      if (locked && result.Role !== "Manager") {
-        sileo.warning({
-          title: "Access Restricted",
-          description: "Login is currently disabled for your role during off-hours.",
-          duration: 4000,
-          position: "top-right",
-          fill: "black",
-          styles: { title: "text-white!", description: "text-white" }
-        });
         setLoading(false);
         return;
       }
@@ -340,21 +336,17 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       const result = await res.json();
       if (!res.ok) {
         if (result.locked) { setTicketDone(false); setShowTicketDialog(true); }
+        else if (result.timeLocked) {
+          sileo.warning({
+            title: "Access Restricted",
+            description: result.message || "Login is currently disabled during off-hours.",
+            duration: 4000,
+            position: "top-right",
+            fill: "black",
+            styles: { title: "text-white!", description: "text-white" }
+          });
+        }
         else { sileo.error({ title: "Login Failed", description: result.message || "Invalid credentials.", duration: 4000, position: "top-right", fill: "black", styles: { title: "text-white!", description: "text-white" } }); }
-        setLoading(false);
-        return;
-      }
-
-      // Check for time lock bypass (Managers only)
-      if (locked && result.Role !== "Manager") {
-        sileo.warning({
-          title: "Access Restricted",
-          description: "Login is currently disabled for your role during off-hours.",
-          duration: 4000,
-          position: "top-right",
-          fill: "black",
-          styles: { title: "text-white!", description: "text-white" }
-        });
         setLoading(false);
         return;
       }
@@ -566,9 +558,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               {/* Submit */}
               <Button
                 type="submit"
-                disabled={loading || locked}
+                disabled={loading}
                 className="w-full h-10 text-sm font-semibold rounded-xl transition-all duration-150 gap-2"
-                style={{ backgroundColor: locked ? "#94a3b8" : s.btn_bg, color: s.btn_text }}
+                style={{ backgroundColor: s.btn_bg, color: s.btn_text }}
               >
                 {loading ? (
                   <><Loader2 size={14} className="animate-spin" /> Signing in...</>

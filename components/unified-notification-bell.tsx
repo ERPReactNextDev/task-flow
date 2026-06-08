@@ -43,7 +43,8 @@ interface SupportTicketNotification {
 type NotificationTab = "all" | "spf" | "quotations" | "support";
 
 export function UnifiedNotificationBell() {
-  const { userId } = useUser();
+  const { userId, user } = useUser();
+  const [referenceid, setReferenceid] = useState<string | null>(null);
   const [spfRequests, setSpfRequests] = useState<SPFRequest[]>([]);
   const [quotations, setQuotations] = useState<QuotationNotification[]>([]);
   const [supportTickets, setSupportTickets] = useState<SupportTicketNotification[]>([]);
@@ -55,6 +56,15 @@ export function UnifiedNotificationBell() {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Update referenceid from user context
+  useEffect(() => {
+    if (user) {
+      setReferenceid(user.ReferenceID || "");
+    } else {
+      setReferenceid(null);
+    }
+  }, [user]);
   const hasUserInteracted = useRef(false);
   const prevSpfRef = useRef<SPFRequest[]>([]);
   const prevQuotationsRef = useRef<QuotationNotification[]>([]);
