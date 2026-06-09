@@ -13,11 +13,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Fetch users from Supabase using the 'id' array
+    const normalizedIds = Array.from(
+      new Set(
+        userIds
+          .map((id) => String(id).trim())
+          .filter(Boolean)
+      )
+    );
+
+    // `users.id` is a bigint in Supabase. Ignore non-numeric IDs instead of
+    // sending invalid values like Firebase-style hex strings to `.in("id", ...)`.
+    const numericIds = normalizedIds.filter((id) => /^\d+$/.test(id));
+
+    if (numericIds.length === 0) {
+      return res.status(200).json({ users: {} });
+    }
+
     const { data: users, error } = await supabase
       .from("users")
       .select("id, Firstname, Lastname, userName, profilePicture, Department")
-      .in("id", userIds);
+      .in("id", numericIds);
 
     if (error) throw error;
 
