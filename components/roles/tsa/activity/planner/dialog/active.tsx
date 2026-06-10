@@ -314,7 +314,7 @@ export function AccountDialog({
     if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
 
     debounceTimeout.current = setTimeout(() => {
-      const name = formData.company_name.trim();
+      const name = (formData.company_name || "").trim();
 
       if (!name || name.length < 2) {
         setCompanyError(name.length > 0 ? "Company Name must be at least 3 characters." : "");
@@ -388,14 +388,14 @@ export function AccountDialog({
     }
 
     const blocked = duplicateInfo.some((dup) => {
-      const personMatch = dup.contact_person?.some((cp) =>
+      const personMatch = (dup.contact_person || []).some((cp) =>
         formData.contact_person.some(
-          (fcp) => fcp.trim().toUpperCase() === cp.trim().toUpperCase(),
+          (fcp) => (fcp || "").trim().toUpperCase() === (cp || "").trim().toUpperCase(),
         ),
       );
-      const numberMatch = dup.contact_number?.some((cn) =>
+      const numberMatch = (dup.contact_number || []).some((cn) =>
         formData.contact_number.some(
-          (fcn) => normalizePHNumber(fcn) === normalizePHNumber(cn),
+          (fcn) => normalizePHNumber(fcn || "") === normalizePHNumber(cn || ""),
         ),
       );
       return personMatch || numberMatch;
@@ -403,14 +403,14 @@ export function AccountDialog({
 
     if (blocked) {
       const dup = duplicateInfo.find((d) => {
-        const personMatch = d.contact_person?.some((cp) =>
+        const personMatch = (d.contact_person || []).some((cp) =>
           formData.contact_person.some(
-            (fcp) => fcp.trim().toUpperCase() === cp.trim().toUpperCase(),
+            (fcp) => (fcp || "").trim().toUpperCase() === (cp || "").trim().toUpperCase(),
           ),
         );
-        const numberMatch = d.contact_number?.some((cn) =>
+        const numberMatch = (d.contact_number || []).some((cn) =>
           formData.contact_number.some(
-            (fcn) => normalizePHNumber(fcn) === normalizePHNumber(cn),
+            (fcn) => normalizePHNumber(fcn || "") === normalizePHNumber(cn || ""),
           ),
         );
         return personMatch || numberMatch;
@@ -427,18 +427,18 @@ export function AccountDialog({
     switch (step) {
       case 0:
         return (
-          formData.company_name.trim().length >= 3 &&
+          (formData.company_name || "").trim().length >= 3 &&
           formData.contact_person.length > 0 &&
-          formData.contact_person.every((v) => v.trim() !== "") &&
+          formData.contact_person.every((v) => (v || "").trim() !== "") &&
           formData.contact_number.length > 0 &&
-          formData.contact_number.every((v) => v.trim() !== "") &&
+          formData.contact_number.every((v) => (v || "").trim() !== "") &&
           !companyError &&
           formData.email_address.length > 0 &&
-          formData.email_address.every((em) => em === "N/A" || isValidEmail(em))
+          formData.email_address.every((em) => (em || "") === "N/A" || isValidEmail(em || ""))
         );
       case 1:
         return (
-          formData.address.trim() !== "" &&
+          (formData.address || "").trim() !== "" &&
           (formData.delivery_address?.length ?? 0) > 0 &&
           formData.region !== ""
         );
@@ -447,7 +447,7 @@ export function AccountDialog({
           formData.type_client !== "" &&
           formData.industry !== "" &&
           formData.status !== "" &&
-          formData.reason.trim() !== ""
+          (formData.reason || "").trim() !== ""
         );
       default:
         return false;
@@ -487,7 +487,7 @@ export function AccountDialog({
     }
 
     for (const em of formData.email_address) {
-      if (em.trim() && em.trim().toLowerCase() !== "n/a" && !isValidEmail(em)) {
+      if ((em || "").trim() && (em || "").trim().toLowerCase() !== "n/a" && !isValidEmail(em || "")) {
         sileo.error({
           title: "Invalid Email",
           description: `Invalid email address: ${em}`,
@@ -503,12 +503,12 @@ export function AccountDialog({
 
     const cleanData = {
       ...formData,
-      company_name: cleanCompanyName(formData.company_name),
-      contact_person: formData.contact_person.map((v) => v.trim()).filter(Boolean),
-      contact_number: formData.contact_number.map((v) => v.trim()).filter(Boolean),
-      email_address: formData.email_address.map((v) => v.trim()).filter(Boolean),
-      address: formData.address.toUpperCase(),
-      delivery_address: formData.delivery_address.toUpperCase(),
+      company_name: cleanCompanyName(formData.company_name || ""),
+      contact_person: (formData.contact_person || []).map((v) => (v || "").trim()).filter(Boolean),
+      contact_number: (formData.contact_number || []).map((v) => (v || "").trim()).filter(Boolean),
+      email_address: (formData.email_address || []).map((v) => (v || "").trim()).filter(Boolean),
+      address: (formData.address || "").toUpperCase(),
+      delivery_address: (formData.delivery_address || "").toUpperCase(),
       referenceid: userDetails.referenceid,
       tsm: userDetails.tsm,
       manager: userDetails.manager,
@@ -1091,10 +1091,10 @@ export function AccountDialog({
                 value={formData.reason}
                 onChange={(e) => updateField("reason", e.target.value)}
                 placeholder="Enter reason..."
-                className={`rounded-none mt-1.5 ${formData.reason.trim() === "" ? "border-red-300 focus-visible:ring-red-400" : ""}`}
+                className={`rounded-none mt-1.5 ${(formData.reason || "").trim() === "" ? "border-red-300 focus-visible:ring-red-400" : ""}`}
                 rows={4}
               />
-              {formData.reason.trim() === "" && (
+              {(formData.reason || "").trim() === "" && (
                 <p className="text-red-500 text-xs mt-1">Reason is required.</p>
               )}
             </div>
