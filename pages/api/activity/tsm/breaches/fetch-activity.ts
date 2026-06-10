@@ -34,10 +34,10 @@ async function fetchOverdueActivities(tsm: string, fields: string = "*") {
         .range(offset, offset + BATCH_SIZE - 1);
 
       if (error) throw error;
-      if (!data || data.length === 0) break;
+      if (!data || (data as any[]).length === 0) break;
 
       // Only past dates, exclude today/future
-      const filtered = data.filter((a) => {
+      const filtered = (data as any[]).filter((a) => {
         const itemScheduledDate = toLocalDateString(a.scheduled_date);
         
         // ❗ ALWAYS exclude TODAY (based on overdue.tsx)
@@ -55,7 +55,7 @@ async function fetchOverdueActivities(tsm: string, fields: string = "*") {
 
       allActivities.push(...filtered);
 
-      if (data.length < BATCH_SIZE) break;
+      if ((data as any[]).length < BATCH_SIZE) break;
       offset += BATCH_SIZE;
     } catch (err) {
       console.error("❌ Error fetching overdue activities batch:", offset, err);
