@@ -1330,11 +1330,12 @@ export default function TaskListEditDialog({
     const emailUsername = email?.split("@")[0] ?? "";
 
     let emailDomain = "";
-    if (item.quotation_type === "Disruptive Solutions Inc")
-      emailDomain = "disruptivesolutionsinc.com";
-    else if (item.quotation_type === "Ecoshift Corporation")
+    const isEcoshift_ = item.quotation_type === "Ecoshift Corporation" || (item.quotation_number || "").startsWith("EC");
+    if (isEcoshift_)
       emailDomain = "ecoshiftcorp.com";
-    else emailDomain = email?.split("@")[1] ?? "";
+    else
+      emailDomain = "disruptivesolutionsinc.com";
+
     const salesemail =
       emailUsername && emailDomain ? `${emailUsername}@${emailDomain}` : "";
 
@@ -1529,9 +1530,11 @@ export default function TaskListEditDialog({
     };
 
     let apiEndpoint = "/api/quotation/disruptive";
-    if (item.quotation_type === "Ecoshift Corporation")
+    const isEcoshift_ = item.quotation_type === "Ecoshift Corporation" || (item.quotation_number || "").startsWith("EC");
+    
+    if (isEcoshift_)
       apiEndpoint = "/api/quotation/ecoshift";
-    else if (item.quotation_type === "Disruptive Solutions Inc")
+    else
       apiEndpoint = "/api/quotation/disruptive";
 
     try {
@@ -1750,7 +1753,7 @@ export default function TaskListEditDialog({
     fetch_();
   }, [item.quotation_number]);
 
-  const isEcoshift = item.quotation_type === "Ecoshift Corporation";
+  const isEcoshift = item.quotation_type === "Ecoshift Corporation" || (item.quotation_number || "").startsWith("EC");
   const headerImagePath = isEcoshift
     ? "/ecoshift-banner.png"
     : "/disruptive-banner.png";
@@ -1897,7 +1900,7 @@ export default function TaskListEditDialog({
       const { default: jsPDF } = await import("jspdf");
       const { default: html2canvas } = await import("html2canvas");
       const payload = getQuotationPayload();
-      const isEcoshift = item.quotation_type === "Ecoshift Corporation";
+      const isEcoshift = item.quotation_type === "Ecoshift Corporation" || (item.quotation_number || "").startsWith("EC");
       
       // Define constants for PDF generation
       const PRIMARY_CHARCOAL = "#121212";

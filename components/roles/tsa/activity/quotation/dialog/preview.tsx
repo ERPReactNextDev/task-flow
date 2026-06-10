@@ -99,7 +99,7 @@ export const Preview: React.FC<PreviewProps> = ({
     // Check if quotation is approved (show PDF/Print buttons only when approved)
     // Also check for unsaved changes - hide PDF download if there are changes
     const isApproved = (approvedStatus === "Approved" || approvedStatus === "Approved By Sales Head" || approvedStatus === "APPROVED" || approvedStatus === "Approved By Manager") && !hasChanges;
-    const isEcoshift = quotationType === "Ecoshift Corporation";
+    const isEcoshift = quotationType === "Ecoshift Corporation" || (payload.referenceNo || "").startsWith("EC");
     const headerImagePath = isEcoshift
         ? "/ecoshift-banner.png"
         : "/disruptive-banner.png";
@@ -781,7 +781,7 @@ export const Preview: React.FC<PreviewProps> = ({
                         <div className="col-span-2 font-black uppercase">Availability:</div>
                         <div className="col-span-10 pl-4 border-l border-gray-100 bg-yellow-50">
                             <p>*5-7 days if on stock upon receipt of approved PO.</p>
-                            <p>*For items not on stock/indent order, an estimate of 45-60 days upon receipt of approved PO & down payment. Barring any delay in shipping and customs clearance beyond Disruptive's control.</p>
+                            <p>*For items not on stock/indent order, an estimate of 45-60 days upon receipt of approved PO & down payment. Barring any delay in shipping and customs clearance beyond {isEcoshift ? "Ecoshift's" : "Disruptive's"} control.</p>
                             <p>*In the event of a conflict or inconsistency in estimated days under Availability and another estimate indicated elsewhere in this quotation, the latter will prevail.</p>
                         </div>
 
@@ -811,7 +811,7 @@ export const Preview: React.FC<PreviewProps> = ({
 
                         <div className="col-span-2 font-black uppercase">Return:</div>
                         <div className="col-span-10 pl-4 border-l border-gray-100 bg-yellow-50">
-                            <p><span className="text-red-600 font-black"><u>7 days return policy - </u></span>if the product received is defective, damaged, or incomplete. This must be communicated to Disruptive, and Disruptive has duly acknowledged communication as received within a maximum of 7 days to qualify for replacement.</p>
+                            <p><span className="text-red-600 font-black"><u>7 days return policy - </u></span>if the product received is defective, damaged, or incomplete. This must be communicated to {isEcoshift ? "Ecoshift" : "Disruptive"}, and {isEcoshift ? "Ecoshift" : "Disruptive"} has duly acknowledged communication as received within a maximum of 7 days to qualify for replacement.</p>
                         </div>
 
                         {/* <div className="col-span-2 font-black uppercase">Bank Details:</div> */}
