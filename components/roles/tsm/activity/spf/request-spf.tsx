@@ -199,9 +199,9 @@ const SPF: React.FC<SPFProps> = ({ referenceid, tsm, manager, prepared_by, first
     const searchLower = searchTerm.toLowerCase();
     const filteredActivities = useMemo(() =>
         allActivities.filter((a) =>
-            a.customer_name.toLowerCase().includes(searchLower) ||
-            a.contact_person.toLowerCase().includes(searchLower) ||
-            a.spf_number.toLowerCase().includes(searchLower)
+            (a.customer_name || "").toLowerCase().includes(searchLower) ||
+            (a.contact_person || "").toLowerCase().includes(searchLower) ||
+            (a.spf_number || "").toLowerCase().includes(searchLower)
         ),
         [allActivities, searchLower]
     );

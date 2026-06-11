@@ -318,6 +318,17 @@ const SPF: React.FC<SPFProps> = ({ referenceid, tsm, manager, prepared_by }) => 
         }
     }, [referenceid, accountsPerPage, accountsLoadMoreCount]);
 
+    // Filter accounts client-side for immediate feedback
+    const filteredAccounts = useMemo(() => {
+        if (!accountsSearchTerm.trim()) return allAccounts;
+        const searchLower = accountsSearchTerm.toLowerCase();
+        return allAccounts.filter(acc => 
+            (acc.company_name || "").toLowerCase().includes(searchLower) ||
+            (acc.contact_person || "").toLowerCase().includes(searchLower) ||
+            (acc.contact_number || "").toLowerCase().includes(searchLower)
+        );
+    }, [allAccounts, accountsSearchTerm]);
+
     useEffect(() => {
         fetchAccounts();
     }, [referenceid, fetchAccounts]);
@@ -693,11 +704,11 @@ const SPF: React.FC<SPFProps> = ({ referenceid, tsm, manager, prepared_by }) => 
                     </div>
 
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
-                        {accountsLoading && allAccounts.length === 0 ? (
+                        {accountsLoading && filteredAccounts.length === 0 ? (
                             <div className="flex justify-center items-center py-20">
                                 <Loader2 className="w-8 h-8 animate-spin text-zinc-200" />
                             </div>
-                        ) : allAccounts.length === 0 ? (
+                        ) : filteredAccounts.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-zinc-300 gap-3">
                                 <Building2 className="w-12 h-12 opacity-10" />
                                 <p className="text-[11px] font-black uppercase tracking-widest">
@@ -706,7 +717,7 @@ const SPF: React.FC<SPFProps> = ({ referenceid, tsm, manager, prepared_by }) => 
                             </div>
                         ) : (
                             <div className="divide-y divide-zinc-50">
-                                {allAccounts.map((acc, idx) => (
+                                {filteredAccounts.map((acc, idx) => (
                                     <div key={acc.id || idx} className="p-4 hover:bg-zinc-50/80 transition-all group">
                                         <div className="flex items-start justify-between gap-3 mb-2">
                                             <div className="min-w-0 flex-1">
