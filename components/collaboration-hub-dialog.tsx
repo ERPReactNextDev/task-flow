@@ -40,6 +40,7 @@ interface Message {
   time: string;
   isResolved?: boolean;
   isSystem?: boolean;
+  systemType?: string;
   imageUrl?: string;
   seenBy?: string[]; 
   reactions?: Record<string, string[]>; 
@@ -67,8 +68,6 @@ interface CollaborationHubDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger?: React.ReactNode;
-  // Optional: allow passing numeric id for chat document
-  chatDocId?: string | number;
   userDepartment?: string;
 }
 
@@ -84,7 +83,6 @@ export function CollaborationHubDialog({
   title = "dsiconnect",
   open,
   onOpenChange,
-  chatDocId,
   userDepartment,
 }: CollaborationHubDialogProps) {
   // Always use spfNumber as document ID for chat to ensure consistency
@@ -504,22 +502,25 @@ export function CollaborationHubDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-3xl h-[calc(100vh-2rem)] p-0 border-none shadow-2xl rounded-3xl overflow-hidden">
+<DialogContent 
+  className="p-0 border-none shadow-2xl rounded-[24px] overflow-hidden"
+  style={{ width: '95vw', maxWidth: '95vw', height: 'calc(100vh - 2rem)' }}
+>
         <DialogTitle className="sr-only">{title} - Collaboration Hub</DialogTitle>
-        <div className="flex flex-col h-full bg-gray-100 relative overflow-hidden">
+        <div className="flex flex-col h-full bg-[#f8fafc] relative overflow-hidden">
           
           {/* Header */}
-          <div className="p-4 bg-linear-to-r from-gray-800 to-gray-900 text-white rounded-b-3xl">
+          <div className="p-5 bg-linear-to-r from-[#4d2121] to-[#5f2828] text-white shrink-0 rounded-t-[24px]">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <EspironLogo />
                 <div>
                   <h3 className="text-base font-bold tracking-tight text-white">{spfNumber}</h3>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="w-4 h-4 bg-green-400 rounded-full animate-pulse" />
-                    <p className="text-xs text-white/70 font-medium uppercase tracking-wider">Online</p>
-                    <span className="text-xs text-white/50">•</span>
-                    <p className="text-xs text-white/70 font-medium">{title}</p>
+                    <div className="size-1.5 bg-green-400 rounded-full animate-pulse" />
+                    <p className="text-[10px] text-white/70 font-medium uppercase tracking-wider">Online</p>
+                    <span className="text-[10px] text-white/50">•</span>
+                    <p className="text-[10px] text-white/70 font-medium">{title}</p>
                   </div>
                 </div>
               </div>
@@ -548,14 +549,22 @@ export function CollaborationHubDialog({
               ref={scrollRef} 
               onScroll={handleScroll} 
               onClick={() => setActiveMessageId(null)} 
-              className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-100 scroll-smooth"
+              className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-[#f1f5f9]/50 scroll-smooth"
             >
             {filteredMessages.map((msg, i) => {
               // FEATURE: SYSTEM MESSAGE RENDER
               if (msg.isSystem) {
+                const isPDSent = msg.systemType === "pd_sent" || msg.text?.toLowerCase().includes("spf send by pd");
                 return (
                   <div key={msg.id} className="flex justify-center my-4">
-                    <span className="px-4 py-1.5 bg-slate-200/50 text-slate-500 text-xs font-black uppercase rounded-full tracking-widest border border-slate-200">
+                    <span
+                      className={cn(
+                        "px-4 py-1.5 text-[10px] font-black uppercase rounded-full tracking-widest border",
+                        isPDSent
+                          ? "bg-green-600 text-white border-green-700"
+                          : "bg-slate-200/50 text-slate-500 border-slate-200",
+                      )}
+                    >
                       {msg.text}
                     </span>
                   </div>
@@ -571,7 +580,7 @@ export function CollaborationHubDialog({
                 <React.Fragment key={msg.id}>
                   {isFirstUnread && (
                     <div ref={unreadRef} className="flex items-center justify-center my-6">
-                      <span className="px-4 py-1 bg-[#be2d2d]/10 text-[#be2d2d] text-xs font-black uppercase rounded-full border border-[#be2d2d]/20">
+                      <span className="px-4 py-1 bg-[#be2d2d]/10 text-[#be2d2d] text-[9px] font-black uppercase rounded-full border border-[#be2d2d]/20">
                         New Messages Below
                       </span>
                     </div>
@@ -583,34 +592,36 @@ export function CollaborationHubDialog({
                   >
                     <Avatar className="h-9 w-9 shrink-0 self-end border-2 border-white shadow-sm">
                       <AvatarImage src={isMe ? profilePicture : msg.senderImage} className="object-cover" />
-                      <AvatarFallback className="bg-[#be2d2d] text-xs text-white">{(msg.senderName || "U").charAt(0)}</AvatarFallback>
+                      <AvatarFallback className="bg-[#be2d2d] text-[10px] text-white">{(msg.senderName || "U").charAt(0)}</AvatarFallback>
                     </Avatar>
 
-                    <div className={cn("flex flex-col gap-1 max-w-[75%]", isMe ? "items-end" : "items-start")}>
+                    <div className={cn("flex flex-col gap-1 max-w-[70%] min-w-0", isMe ? "items-end" : "items-start")}>
                       {!isMe && <span className="text-[10px] text-slate-500 font-bold ml-1">{msg.senderName}</span>}
-                      <div 
+                      <div
                         onClick={(e) => {
                           e.stopPropagation();
                           setActiveMessageId(isActive ? null : msg.id);
                         }}
                         className={cn(
-                          "px-4 py-2.5 text-[13px] shadow-sm relative transition-all duration-300 cursor-pointer touch-manipulation",
+                          "px-4 py-2.5 text-[13px] shadow-sm relative transition-all duration-300 cursor-pointer touch-manipulation max-w-full",
                           isMe ? "bg-[#be2d2d] text-white rounded-2xl rounded-br-none" : "bg-white text-slate-800 rounded-2xl rounded-bl-none",
                           msg.isResolved && "opacity-60 grayscale-[0.5]",
                           isActive && "ring-2 ring-[#dc8c28] ring-offset-1"
                         )}
                       >
                         <div className={cn(
-                          "absolute top-full mt-2 flex items-center gap-1 transition-all z-20 bg-white shadow-xl rounded-full p-1 border border-slate-100",
-                          (isActive) ? "opacity-100 scale-100 visible" : "opacity-0 scale-95 invisible group-hover:opacity-100 group-hover:scale-100 group-hover:visible",
+                          "absolute top-full mt-2 flex items-center gap-1 transition-all z-50 bg-white shadow-xl rounded-full p-1 border border-slate-100",
+                          (isActive) ? "opacity-100 scale-100 visible pointer-events-auto" : "opacity-0 scale-95 invisible pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:visible group-hover:pointer-events-auto",
                           isMe ? "right-0" : "left-0"
                         )}>
-                          <button onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "👍"); }} className="p-1.5 hover:bg-slate-50 rounded-full transition-colors"><ThumbsUp size={14} className="text-[#be2d2d]" /></button>
-                          <button onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "❤️"); }} className="p-1.5 hover:bg-slate-50 rounded-full transition-colors"><Heart size={14} className="text-red-500" /></button>
-                          <button onClick={(e) => { e.stopPropagation(); toggleReaction(msg.id, "😊"); }} className="p-1.5 hover:bg-slate-50 rounded-full transition-colors"><Smile size={14} className="text-yellow-500" /></button>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleReaction(msg.id, "👍"); }} className="p-1.5 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"><ThumbsUp size={14} className="text-[#be2d2d]" /></button>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleReaction(msg.id, "❤️"); }} className="p-1.5 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"><Heart size={14} className="text-red-500" /></button>
+                          <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleReaction(msg.id, "😊"); }} className="p-1.5 hover:bg-slate-50 rounded-full transition-colors cursor-pointer"><Smile size={14} className="text-yellow-500" /></button>
                           <div className="w-px h-4 bg-slate-200 mx-1" />
-                          <button 
+                          <button
+                            type="button"
                             onClick={(e) => { 
+                              e.preventDefault(); 
                               e.stopPropagation(); 
                               if (!chatMessage.trim()) {
                                 setReplyingTo(msg); 
@@ -625,14 +636,15 @@ export function CollaborationHubDialog({
                                 setShowReplyDialog(true);
                                 setActiveMessageId(null);
                               }
-                            }} 
-                            className="p-1.5 hover:bg-slate-50 rounded-full text-slate-600"
+                            }}
+                            className="p-1.5 hover:bg-slate-50 rounded-full text-slate-600 cursor-pointer"
                           >
                             <Reply size={14} />
                           </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); toggleResolve(msg.id); }} 
-                            className="p-1.5 hover:bg-slate-50 rounded-full text-green-600"
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleResolve(msg.id); }}
+                            className="p-1.5 hover:bg-slate-50 rounded-full text-green-600 cursor-pointer"
                           >
                             <CheckCircle2 size={14} />
                           </button>
@@ -664,7 +676,9 @@ export function CollaborationHubDialog({
                         )}
                         
                         {/* MENTION RENDERING */}
-                        <p className="whitespace-pre-wrap leading-relaxed">{renderMessageText(msg.text)}</p>
+                        <div className="overflow-hidden">
+                          <p className="whitespace-pre-wrap leading-relaxed break-words overflow-wrap-anywhere">{renderMessageText(msg.text)}</p>
+                        </div>
                         
                         {msg.reactions && Object.entries(msg.reactions).some(([_, users]) => users.length > 0) && (
                           <div className="flex flex-wrap gap-1 mt-2">
@@ -697,7 +711,7 @@ export function CollaborationHubDialog({
           {showScrollButton && (
             <button 
               onClick={() => scrollToBottom()}
-              className="absolute bottom-28 right-6 h-11 w-11 bg-white border border-slate-200 rounded-full shadow-2xl flex items-center justify-center text-[#be2d2d] hover:scale-110 transition-all z-60 animate-in fade-in zoom-in"
+              className="absolute bottom-28 right-6 h-11 w-11 bg-white border border-slate-200 rounded-full shadow-2xl flex items-center justify-center text-[#be2d2d] hover:scale-110 transition-all z-[60] animate-in fade-in zoom-in"
             >
               <ChevronDown size={20} />
               {unreadCount > 0 && (
@@ -709,7 +723,7 @@ export function CollaborationHubDialog({
           )}
 
           {/* Input Area */}
-          <div className="p-4 bg-white border-t border-slate-100 relative shadow-[0_-4px_15px_rgba(0,0,0,0.05)] rounded-b-3xl">
+          <div className="p-4 bg-white border-t border-slate-100 relative shadow-[0_-4px_15px_rgba(0,0,0,0.05)] rounded-b-[24px]">
             {/* TYPING UI */}
             {typingUsers.length > 0 && (
               <div className="absolute -top-6 left-6 text-[10px] text-slate-400 italic bg-white/80 px-2 py-0.5 rounded-full">

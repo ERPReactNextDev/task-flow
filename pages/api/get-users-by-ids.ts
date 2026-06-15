@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { supabase } from "@/utils/supabase";
+import { connectToDatabase } from "@/lib/mongodb";
+import { ObjectId } from "mongodb";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -13,34 +14,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const normalizedIds = Array.from(
-      new Set(
-        userIds
-          .map((id) => String(id).trim())
-          .filter(Boolean)
-      )
-    );
+    const db = await connectToDatabase();
+    const usersCollection = db.collection("users");
 
-    // `users.id` is a bigint in Supabase. Ignore non-numeric IDs instead of
-    // sending invalid values like Firebase-style hex strings to `.in("id", ...)`.
-    const numericIds = normalizedIds.filter((id) => /^\d+$/.test(id));
+    // Convert string IDs to ObjectId
+    const objectIds = userIds
+      .filter(id => ObjectId.isValid(id))
+      .map(id => new ObjectId(id));
 
-    if (numericIds.length === 0) {
-      return res.status(200).json({ users: {} });
-    }
-
-    const { data: users, error } = await supabase
-      .from("users")
-      .select("id, Firstname, Lastname, userName, profilePicture, Department")
-      .in("id", numericIds);
-
-    if (error) throw error;
+    // Fetch users with only necessary fields
+    const users = await usersCollection
+      .find({ _id: { $in: objectIds } })
+      .project({ 
+        _id: 1, 
+        Firstname: 1, 
+        Lastname: 1,
+        userName: 1,
+        profilePicture: 1,
+        Department: 1
+      })
+      .toArray();
 
     // Create a map of userId -> user data
     const userMap: Record<string, { firstName: string; lastName: string; userName: string; profilePicture?: string; department?: string }> = {};
     
-    users?.forEach(user => {
-      userMap[user.id.toString()] = {
+    users.forEach(user => {
+      userMap[user._id.toString()] = {
         firstName: user.Firstname || "",
         lastName: user.Lastname || "",
         userName: user.userName || "",
@@ -51,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({ users: userMap });
   } catch (err) {
-    console.error("Error fetching users from Supabase:", err);
+    console.error("Error fetching users:", err);
     return res.status(500).json({ message: "Server error" });
   }
 }
