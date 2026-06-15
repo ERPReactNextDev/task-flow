@@ -69,21 +69,32 @@ function Speedometer({ label, value, maxHours = 2 }: {
 
 /* ================= MAIN COMPONENT ================= */
 export function CSRMetricsCard({
-  referenceId,       // ← same pattern as breaches.tsx
+  referenceId,
   dateRange,
+  onMetricsChange,
 }: {
   referenceId: string;
   dateRange?: { from?: Date; to?: Date };
+  onMetricsChange?: (metrics: {
+    avgResponseTime: number;
+    avgQuotationHT: number;
+    avgNonQuotationHT: number;
+  }) => void;
 }) {
   const today = new Date().toISOString().split("T")[0];
 
-  // ── Derive from/to strings the same way breaches.tsx does ──────────────
+  // ── Derive from/to strings for the display chart (follows dateRange filter) ─
   const fromDate = dateRange?.from
     ? new Date(dateRange.from).toISOString().split("T")[0]
     : today;
   const toDate = dateRange?.to
     ? new Date(dateRange.to).toISOString().split("T")[0]
     : today;
+
+  // ── Current month range — always used for KPI weighted score callback ──────
+  const now = new Date();
+  const monthFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const monthTo   = today;
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +183,7 @@ export function CSRMetricsCard({
       setAvgNonQuotationHT(nqCount ? nqTotal / nqCount : 0);
       setAvgQuotationHT(qCount ? qTotal / qCount : 0);
       setAvgSpfHT(spfCount ? spfTotal / spfCount : 0);
+
     } catch {
       setError("Failed to fetch CSR metrics");
     } finally {
@@ -179,11 +191,82 @@ export function CSRMetricsCard({
     }
   }, []);
 
-  // ── Re-fetch whenever referenceId or date range changes ────────────────
+  // ── Re-fetch display chart whenever referenceId or date range changes ──
   useEffect(() => {
     if (!referenceId) return;
     fetchCSRMetrics(referenceId, fromDate, toDate);
   }, [referenceId, fromDate, toDate, fetchCSRMetrics]);
+
+  // ── Separate monthly fetch — always current month, for KPI score ───────
+  useEffect(() => {
+    if (!referenceId || !onMetricsChange) return;
+
+    const computeMonthly = async () => {
+      try {
+        const res = await fetch(
+          `/api/act-fetch-activity-v2?referenceid=${encodeURIComponent(referenceId)}`
+        );
+        if (!res.ok) return;
+        const result = await res.json();
+        const data: any[] = result.data || [];
+
+        const excluded = [
+          "CustomerFeedback/Recommendation", "Job Inquiry", "Job Applicants",
+          "Supplier/Vendor Product Offer", "Internal Whistle Blower",
+          "Threats/Extortion/Intimidation", "Prank Call",
+        ];
+
+        const now = new Date();
+        const fromTs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const toTs   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+
+        let rtTotal = 0, rtCount = 0;
+        let nqTotal = 0, nqCount = 0;
+        let qTotal  = 0, qCount  = 0;
+
+        data.forEach((row) => {
+          if (row.status !== "Closed" && row.status !== "Converted into Sales") return;
+          const created = new Date(row.date_created).getTime();
+          if (isNaN(created) || created < fromTs || created > toTs) return;
+          if (excluded.includes(row.wrap_up)) return;
+
+          const tsaAck   = new Date(row.tsa_acknowledge_date).getTime();
+          const endorsed = new Date(row.ticket_endorsed).getTime();
+          if (!isNaN(tsaAck) && !isNaN(endorsed) && tsaAck >= endorsed) {
+            rtTotal += (tsaAck - endorsed) / 3600000;
+            rtCount++;
+          }
+
+          const received  = new Date(row.ticket_received).getTime();
+          const tsaHandle = new Date(row.tsa_handling_time).getTime();
+          const tsmHandle = new Date(row.tsm_handling_time).getTime();
+          let baseHT = 0;
+          if (!isNaN(tsaHandle) && !isNaN(received) && tsaHandle >= received)
+            baseHT = (tsaHandle - received) / 3600000;
+          else if (!isNaN(tsmHandle) && !isNaN(received) && tsmHandle >= received)
+            baseHT = (tsmHandle - received) / 3600000;
+          if (!baseHT) return;
+
+          const remarks = (row.remarks || "").toUpperCase();
+          if (remarks === "QUOTATION FOR APPROVAL" || remarks === "SOLD") {
+            qTotal += baseHT; qCount++;
+          } else if (!remarks.includes("SPF")) {
+            nqTotal += baseHT; nqCount++;
+          }
+        });
+
+        onMetricsChange({
+          avgResponseTime:   rtCount ? rtTotal / rtCount : 0,
+          avgQuotationHT:    qCount  ? qTotal  / qCount  : 0,
+          avgNonQuotationHT: nqCount ? nqTotal / nqCount : 0,
+        });
+      } catch {
+        // silently fail — KPI score will default to rating 1
+      }
+    };
+
+    computeMonthly();
+  }, [referenceId, onMetricsChange]);
 
   /* ================= UI ================= */
   return (

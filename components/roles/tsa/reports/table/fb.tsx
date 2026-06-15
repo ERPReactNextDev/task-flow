@@ -134,7 +134,15 @@ export const FBTable: React.FC<{
     if (from && to) { url.searchParams.append("from", from); url.searchParams.append("to", to); }
     fetch(url.toString())
       .then(async (r) => { if (!r.ok) throw new Error("Failed to fetch"); return r.json(); })
-      .then((d) => setActivities(d.activities || []))
+      .then((d) => {
+          const seen = new Set<number>();
+          const unique = (d.activities || []).filter((a: FB) => {
+            if (seen.has(a.id)) return false;
+            seen.add(a.id);
+            return true;
+          });
+          setActivities(unique);
+        })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [referenceid, dateCreatedFilterRange]);
