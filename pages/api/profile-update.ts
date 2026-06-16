@@ -1,5 +1,4 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import bcrypt from "bcrypt";
 import { v2 as cloudinary } from "cloudinary";
 import { logAuditTrailWithSession } from "@/lib/auditTrail";
 import { supabase } from "@/utils/supabase";
@@ -57,12 +56,18 @@ export default async function updateProfile(req: NextApiRequest, res: NextApiRes
     return res.status(400).json({ error: "User ID is required" });
   }
 
+  // Supabase uses a numeric bigint PK — cast to number
+  const numericId = Number(id);
+  if (isNaN(numericId)) {
+    return res.status(400).json({ error: "Invalid User ID" });
+  }
+
   try {
     // 1. Fetch current user data from Supabase for asset comparison
     const { data: currentUser, error: fetchError } = await supabase
       .from("users")
       .select("*")
-      .eq("id", id)
+      .eq("id", numericId)
       .single();
 
     if (fetchError || !currentUser) {
@@ -116,7 +121,7 @@ export default async function updateProfile(req: NextApiRequest, res: NextApiRes
     const { data: finalUser, error: updateError } = await supabase
       .from("users")
       .update(updatedUser)
-      .eq("id", id)
+      .eq("id", numericId)
       .select()
       .single();
 
