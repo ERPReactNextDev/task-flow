@@ -22,9 +22,11 @@ export async function GET(req: Request) {
       );
     }
 
-    const Xchire_fetch = await Xchire_sql`
-      SELECT * FROM accounts WHERE referenceid = ${referenceId};
-    `;
+const Xchire_fetch = await Xchire_sql`
+  SELECT * FROM accounts
+  WHERE referenceid = ${referenceId}
+  AND LOWER(status) IN ('active', 'for approval');
+`;
 
     if (Xchire_fetch.length === 0) {
       return NextResponse.json(
