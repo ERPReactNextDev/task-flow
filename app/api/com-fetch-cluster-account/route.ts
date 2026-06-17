@@ -1,3 +1,5 @@
+Revised mo ito dapat Active, For Approval status lang ang tatanggapin normalize mo nalang ito
+
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
 
