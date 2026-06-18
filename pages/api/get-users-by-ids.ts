@@ -13,45 +13,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const normalizedIds = Array.from(
-      new Set(
-        userIds
-          .map((id) => String(id).trim())
-          .filter(Boolean)
-      )
-    );
-
-    // `users.id` is a bigint in Supabase. Ignore non-numeric IDs instead of
-    // sending invalid values like Firebase-style hex strings to `.in("id", ...)`.
-    const numericIds = normalizedIds.filter((id) => /^\d+$/.test(id));
-
-    if (numericIds.length === 0) {
-      return res.status(200).json({ users: {} });
-    }
-
+    // Fetch users from Supabase - convert string IDs to numbers for query
     const { data: users, error } = await supabase
       .from("users")
       .select("id, Firstname, Lastname, userName, profilePicture, Department")
-      .in("id", numericIds);
+      .in("id", userIds.map(id => parseInt(id)));
 
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase error:", error);
+      return res.status(500).json({ message: "Database error" });
+    }
 
     // Create a map of userId -> user data
     const userMap: Record<string, { firstName: string; lastName: string; userName: string; profilePicture?: string; department?: string }> = {};
     
-    users?.forEach(user => {
-      userMap[user.id.toString()] = {
-        firstName: user.Firstname || "",
-        lastName: user.Lastname || "",
-        userName: user.userName || "",
-        profilePicture: user.profilePicture || "",
-        department: user.Department || ""
-      };
+    users?.forEach((user: any) => {
+      // Use the id field as string to match Firebase seenBy IDs
+      const userId = user.id?.toString();
+      if (userId) {
+        userMap[userId] = {
+          firstName: user.Firstname || "",
+          lastName: user.Lastname || "",
+          userName: user.userName || "",
+          profilePicture: user.profilePicture || "",
+          department: user.Department || ""
+        };
+      }
     });
 
     return res.status(200).json({ users: userMap });
   } catch (err) {
-    console.error("Error fetching users from Supabase:", err);
+    console.error("Error fetching users:", err);
     return res.status(500).json({ message: "Server error" });
   }
 }

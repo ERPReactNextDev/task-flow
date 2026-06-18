@@ -24,15 +24,22 @@ export async function GET(req: Request) {
     }
 
     const currentYear = new Date().getFullYear();
-    const startDate = `${currentYear}-01-01T00:00:00Z`;
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
 
-    // Fetch all Delivered / Closed Transaction records for the current year
-    const { data, error } = await supabase
+    const startDate = from ? `${from}T00:00:00Z` : `${currentYear}-01-01T00:00:00Z`;
+    const endDate   = to   ? `${to}T23:59:59Z`   : null;
+
+    let query = supabase
       .from("history")
       .select("actual_sales, date_created")
       .eq("referenceid", referenceid)
       .eq("type_activity", "Delivered / Closed Transaction")
       .gte("date_created", startDate);
+
+    if (endDate) query = query.lte("date_created", endDate);
+
+    const { data, error } = await query;
 
     if (error) throw error;
 
@@ -46,11 +53,12 @@ export async function GET(req: Request) {
       monthlyTotals[month] += Number(record.actual_sales) || 0;
     }
 
-    // Only return months up to the current month (no future zeroes)
-    const currentMonth = new Date().getMonth(); // 0-indexed
-    const months = MONTH_NAMES.slice(0, currentMonth + 1).map((name, i) => ({
+    // Only return months within the queried range
+    const endLimit = to ? new Date(to).getMonth() : new Date().getMonth();
+    const startLimit = from ? new Date(from).getMonth() : 0;
+    const months = MONTH_NAMES.slice(startLimit, endLimit + 1).map((name, i) => ({
       month: name,
-      total: monthlyTotals[i],
+      total: monthlyTotals[startLimit + i],
     }));
 
     return NextResponse.json(

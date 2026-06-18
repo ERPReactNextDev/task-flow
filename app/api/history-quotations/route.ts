@@ -10,21 +10,20 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const referenceid = url.searchParams.get("referenceid");
-    const now = new Date();
-    const currentYear = now.getFullYear().toString();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0'); // 06 for June
-    const startDate = `${currentYear}-${currentMonth}-01T00:00:00Z`;
-
-    console.log("Received referenceid for approved quotations:", referenceid, "Start date:", startDate);
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
 
     if (!referenceid) {
-      return NextResponse.json(
-        { success: false, error: "Missing reference ID." },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Missing reference ID." }, { status: 400 });
     }
 
-    const { data, error, count } = await supabase
+    const now = new Date();
+    const startDate = from
+      ? `${from}T00:00:00Z`
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01T00:00:00Z`;
+    const endDate = to ? `${to}T23:59:59Z` : null;
+
+    let query = supabase
       .from("history")
       .select("quotation_number", { count: "exact" })
       .eq("referenceid", referenceid)
@@ -32,19 +31,15 @@ export async function GET(req: Request) {
       .or("tsm_approved_status.eq.Approved By Sales Head,tsm_approved_status.eq.Approved")
       .gte("date_created", startDate);
 
-    console.log("Supabase response for quotations:", { data, error, count });
+    if (endDate) query = query.lte("date_created", endDate);
+
+    const { error, count } = await query;
     if (error) throw error;
 
-    return NextResponse.json(
-      { success: true, count: count || 0 },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, count: count || 0 }, { status: 200 });
   } catch (err: any) {
     console.error("Error fetching approved quotations:", err);
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to fetch approved quotations." },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: err.message || "Failed to fetch approved quotations." }, { status: 500 });
   }
 }
 

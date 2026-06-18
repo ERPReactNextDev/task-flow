@@ -84,6 +84,7 @@ const data = {
       icon: Home,
       pages: [
         { name: "Active", url: "/roles/tsa/companies/active", icon: BookOpen },
+        { name: "Inactive", url: "/roles/tsa/companies/leads", icon: Users },
         { name: "Deletion", url: "/roles/tsa/companies/remove", icon: Trash2 },
         { name: "Group / Industry", url: "/roles/tsa/companies/group", icon: Users },
         //{ name: "Account Management", url: "/roles/tsa/companies/account-management", icon: Building },
