@@ -790,7 +790,7 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* ── Summary cards ── */}
+          {/* ── Summary
           {visibility.summaryCards && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <RunningTargetCard
@@ -888,6 +888,8 @@ function DashboardContent() {
               newAccountTarget={newAccountTarget}
             />
           )}
+
+          cards ── */}
 
           {/* ── Account / Activity Cards ── */}
           {visibility.accountCards && (
