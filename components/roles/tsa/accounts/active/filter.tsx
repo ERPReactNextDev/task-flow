@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Select,
   SelectTrigger,
@@ -131,7 +131,7 @@ export function AccountsActiveFilter({
   const [industryPopoverOpen, setIndustryPopoverOpen] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
-  const [tableStyles, setTableStyles] = useState({
+  const tableStyles = {
     th_bg: "#f9fafb",
     layout: "datatable",
     td_text: "#111827",
@@ -170,17 +170,7 @@ export function AccountsActiveFilter({
     pagination_active_bg: "#3b82f6",
     toolbar_input_border: "#d1d5db",
     pagination_active_text: "#ffffff"
-
-  });
-
-  useEffect(() => {
-    fetch("/api/table-styles")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.table_styles) setTableStyles(data.table_styles);
-      })
-      .catch(() => { }); // silently fall back to defaults
-  }, []);
+  };
 
   // Dynamic options from posts data
   const regionOptions = useMemo(() => {

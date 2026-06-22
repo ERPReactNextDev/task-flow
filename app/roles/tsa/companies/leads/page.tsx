@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, Suspense } from "react";
+import React, { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { UserProvider, useUser } from "@/contexts/UserContext";
@@ -106,25 +106,29 @@ function DashboardContent() {
   }, [userId]);
 
   // Fetch inactive (leads) accounts
-  useEffect(() => {
+  const fetchAccounts = useCallback(async () => {
     if (!userDetails.referenceid) { setPosts([]); return; }
     setLoadingAccounts(true);
-    fetch(`/api/com-fetch-leads-account?referenceid=${encodeURIComponent(userDetails.referenceid)}`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to fetch leads");
-        return res.json();
-      })
-      .then((data) => setPosts(data.data || []))
-      .catch(() => {
-        sileo.error({
-          title: "Failed",
-          description: "Failed to load inactive accounts.",
-          duration: 4000, position: "top-right", fill: "black",
-          styles: { title: "text-white!", description: "text-white" },
-        });
-      })
-      .finally(() => setLoadingAccounts(false));
+    try {
+      const res = await fetch(`/api/com-fetch-leads-account?referenceid=${encodeURIComponent(userDetails.referenceid)}`);
+      if (!res.ok) throw new Error("Failed to fetch leads");
+      const data = await res.json();
+      setPosts(data.data || []);
+    } catch {
+      sileo.error({
+        title: "Failed",
+        description: "Failed to load inactive accounts.",
+        duration: 4000, position: "top-right", fill: "black",
+        styles: { title: "text-white!", description: "text-white" },
+      });
+    } finally {
+      setLoadingAccounts(false);
+    }
   }, [userDetails.referenceid]);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   const loading = loadingUser || loadingAccounts;
 
@@ -181,6 +185,7 @@ function DashboardContent() {
               userDetails={userDetails}
               dateCreatedFilterRange={dateCreatedFilterRange}
               setDateCreatedFilterRangeAction={setDateCreatedFilterRangeAction}
+              onRefreshAccountsAction={fetchAccounts}
             />
           )}
         </main>

@@ -41,10 +41,10 @@ export function TransferDialog({
   const [selectedAgent, setSelectedAgent] = useState<string>("");
   const [search, setSearch] = useState("");
 
-  const [tableStyles, setTableStyles] = useState({
+  const tableStyles = {
     table_bg: "#ffffff",
     table_border: "#111111",
-    table_border_radius: "0",
+    table_border_radius: "16",
     tr_border: "#d1d5db",
     tr_hover_bg: "#f3f4f6",
     th_bg: "#1f1f1f",
@@ -73,14 +73,7 @@ export function TransferDialog({
     toolbar_btn_border: "#3f3f3f",
     toolbar_input_text: "#ffffff",
     toolbar_input_border: "#3f3f3f",
-  });
-
-  useEffect(() => {
-    fetch("/api/table-styles")
-      .then((res) => res.json())
-      .then((data) => { if (data?.table_styles) setTableStyles(data.table_styles); })
-      .catch(() => { });
-  }, []);
+  };
 
   // Reset state when dialog closes
   useEffect(() => {

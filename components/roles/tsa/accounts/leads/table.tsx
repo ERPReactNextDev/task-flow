@@ -15,13 +15,16 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Building2, Users, Activity, PenIcon } from "lucide-react";
+import { Users, Activity, PenIcon, Repeat } from "lucide-react";
 import { format } from "date-fns";
 import { type DateRange } from "react-day-picker";
 import { LeadsEditDialog } from "./edit-dialog";
+import { TransferDialog } from "../active/dialog/transfer";
+import { sileo } from "sileo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +60,7 @@ interface LeadsTableProps {
   userDetails: UserDetails;
   dateCreatedFilterRange?: DateRange;
   setDateCreatedFilterRangeAction?: React.Dispatch<React.SetStateAction<DateRange | undefined>>;
+  onRefreshAccountsAction?: () => Promise<void>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -136,12 +140,18 @@ function hasRealArrayValue(arr: string[]): boolean {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
+export function LeadsTable({ posts = [], userDetails, onRefreshAccountsAction }: LeadsTableProps) {
   const tableRef = useRef<HTMLDivElement>(null);
   const [globalFilter, setGlobalFilter] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [regionFilter, setRegionFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [rowSelection, setRowSelection] = useState<{ [key: string]: boolean }>({});
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [localPosts, setLocalPosts] = useState<Account[]>(posts);
+
+  useEffect(() => setLocalPosts(posts), [posts]);
 
   // ── Edit state ───────────────────────────────────────────────────────────
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -151,7 +161,7 @@ export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
   }
 
   const filteredData = useMemo(() => {
-    return posts.filter((item) => {
+    return localPosts.filter((item) => {
       const matchesSearch = !globalFilter ||
         Object.values(item).some(
           (v) => v != null && String(v).toLowerCase().includes(globalFilter.toLowerCase())
@@ -162,7 +172,7 @@ export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
     }).sort((a, b) =>
       new Date(b.date_updated).getTime() - new Date(a.date_updated).getTime()
     );
-  }, [posts, globalFilter, regionFilter, typeFilter]);
+  }, [localPosts, globalFilter, regionFilter, typeFilter]);
 
   const stats = useMemo(() => ({
     total:    filteredData.length,
@@ -175,6 +185,29 @@ export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
   }), [filteredData]);
 
   const columns = useMemo<ColumnDef<Account>[]>(() => [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+          aria-label="Select all"
+          className="h-5 w-5 p-0 hover:bg-blue-50 hover:text-blue-600 border border-zinc-200 transition-all group/edit"
+          style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(!!v)}
+          aria-label={`Select ${row.original.company_name}`}
+          className="h-5 w-5 p-0 hover:bg-blue-50 hover:text-blue-600 border border-zinc-200 transition-all group/edit"
+          style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       id: "actions",
       header: "",
@@ -432,17 +465,90 @@ export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
   const table = useReactTable({
     data: filteredData,
     columns,
+    state: { rowSelection },
+    onRowSelectionChange: setRowSelection,
     getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
 
+  const selectedAccountIds = Object.keys(rowSelection).filter(
+    (id) => rowSelection[id]
+  );
+
   // ── Unique regions for filter ─────────────────────────────────────────────
   const regions = useMemo(() => {
     const r = new Set(posts.map((p) => p.region).filter(Boolean));
     return Array.from(r).sort();
   }, [posts]);
+
+  // ── Fetch agents ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!userDetails.referenceid) return;
+    fetch(
+      `/api/fetch-all-user-transfer?id=${encodeURIComponent(
+        userDetails.referenceid
+      )}`
+    )
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(setAgents)
+      .catch(console.error);
+  }, [userDetails.referenceid]);
+
+  // ── Bulk transfer ─────────────────────────────────────────────────────────
+  async function handleBulkTransfer(
+    transferTo: string,
+    accountIds: string[]
+  ) {
+    if (!accountIds.length || !transferTo) return;
+    setLocalPosts((prev) =>
+      prev.map((item) =>
+        accountIds.includes(item.id)
+          ? { ...item, status: "Subject for Transfer", transfer_to: transferTo }
+          : item
+      )
+    );
+    try {
+      const res = await fetch("/api/com-bulk-transfer-account", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: accountIds,
+          status: "Subject for Transfer",
+          transfer_to: transferTo,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      sileo.success({
+        title: "Transfer Requested",
+        description: "Pending TSM approval.",
+        duration: 4000,
+        position: "top-right",
+        fill: "black",
+        styles: { title: "text-white!", description: "text-white" },
+      });
+      if (onRefreshAccountsAction) {
+        await onRefreshAccountsAction();
+      }
+      setRowSelection({});
+      setIsTransferDialogOpen(false);
+    } catch {
+      sileo.error({
+        title: "Failed",
+        description: "Failed to transfer accounts.",
+        duration: 4000,
+        position: "top-right",
+        fill: "black",
+        styles: { title: "text-white!", description: "text-white" },
+      });
+    }
+  }
+
+
 
   const clusterTypes = [
     "top 50", "next 30", "balance 20", "new client", "tsa client", "csr client",
@@ -570,6 +676,23 @@ export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
               </select>
             )}
 
+            {selectedAccountIds.length > 0 && (
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {selectedAccountIds.length} selected
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="cursor-pointer h-8 text-xs"
+                  style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
+                  onClick={() => setIsTransferDialogOpen(true)}
+                >
+                  <Repeat className="h-3.5 w-3.5 mr-1" /> Transfer
+                </Button>
+              </div>
+            )}
+
             <div
               className="flex items-center gap-2 px-3 py-1 border text-[10px] font-bold uppercase tracking-widest"
               style={{ color: tableStyles.toolbar_btn_text, borderColor: tableStyles.toolbar_btn_border, backgroundColor: tableStyles.toolbar_btn_bg, borderRadius: `${tableStyles.table_border_radius}px` }}
@@ -661,6 +784,15 @@ export function LeadsTable({ posts = [], userDetails }: LeadsTableProps) {
           // Brief timeout then reload so parent re-fetches fresh data
           setTimeout(() => window.location.reload(), 300);
         }}
+      />
+      
+      {/* ── Transfer Dialog ── */}
+      <TransferDialog
+        open={isTransferDialogOpen}
+        onOpenChange={setIsTransferDialogOpen}
+        agents={agents}
+        selectedAccountIds={selectedAccountIds}
+        onConfirmTransfer={handleBulkTransfer}
       />
     </div>
   );
