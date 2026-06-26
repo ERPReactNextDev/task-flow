@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { v2 as cloudinary } from "cloudinary";
 import { logAuditTrailWithSession } from "@/lib/auditTrail";
 import { supabase } from "@/utils/supabase";
+import bcrypt from "bcrypt";
 
 // Cloudinary Configuration
 cloudinary.config({
@@ -112,9 +113,10 @@ export default async function updateProfile(req: NextApiRequest, res: NextApiRes
       updatedUser.signatureImage = signatureImage;
     }
 
-    // 4. Handle Password Update (Hashed if you prefer, or plain text as requested for login-form)
+    // 4. Handle Password Update (Hash with bcrypt)
     if (Password) {
-      updatedUser.Password = Password;
+      const hashedPassword = await bcrypt.hash(Password, 10);
+      updatedUser.Password = hashedPassword;
     }
 
     // 5. Update Database (Supabase)
