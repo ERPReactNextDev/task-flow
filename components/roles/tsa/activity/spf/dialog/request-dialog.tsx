@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { CancelDialog } from "../cancel-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -334,6 +335,7 @@ function QuotationView({
   const [loadingOffers, setLoadingOffers] = useState(false);
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
   const fullName = [firstname, lastname].filter(Boolean).join(" ").trim() || prepared_by || "";
 
@@ -374,6 +376,25 @@ function QuotationView({
       else await handleCreateSPF(updated);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCancel = async (reason: string, customReason?: string) => {
+    setSubmitting(true);
+    const updated = {
+      ...currentSPF,
+      is_cancelled: true,
+      is_cancelled_reason: reason,
+      is_cancelled_reason_others_remarks: customReason,
+      status: "Cancelled"
+    };
+    setCurrentSPF(updated);
+    try {
+      if (isEditMode) await handleEditSPF(updated);
+      else await handleCreateSPF(updated);
+    } finally {
+      setSubmitting(false);
+      setIsCancelDialogOpen(false);
     }
   };
 
@@ -668,6 +689,17 @@ function QuotationView({
             >
               ← Close
             </button>
+            {!currentSPF?.is_cancelled && (
+              <button
+                onClick={() => setIsCancelDialogOpen(true)}
+                disabled={submitting}
+                style={{ ...F, fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", color: "#fecaca", background: "#7f1d1d", border: "1px solid #dc2626", padding: "7px 16px", cursor: submitting ? "not-allowed" : "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", opacity: submitting ? 0.6 : 1 }}
+                onMouseEnter={(e) => { if (!submitting) e.currentTarget.style.background = "#991b1b"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#7f1d1d"; }}
+              >
+                Cancel Request
+              </button>
+            )}
           </div>
         </div>
       </DialogContent>
@@ -702,6 +734,15 @@ function QuotationView({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Cancel Dialog */}
+      <CancelDialog
+        open={isCancelDialogOpen}
+        onOpenChange={setIsCancelDialogOpen}
+        spfNumber={currentSPF?.spf_number || "SPF-PENDING"}
+        spfId={currentSPF?.id}
+        onConfirm={handleCancel}
+      />
     </Dialog>
   );
 }
@@ -723,6 +764,7 @@ function StepperView({
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
   const MASTER_PASSWORD = "PHDEVTECH";
 
@@ -827,6 +869,25 @@ function StepperView({
       else await handleCreateSPF(updated);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCancel = async (reason: string, customReason?: string) => {
+    setSubmitting(true);
+    const updated = {
+      ...currentSPF,
+      is_cancelled: true,
+      is_cancelled_reason: reason,
+      is_cancelled_reason_others_remarks: customReason,
+      status: "Cancelled"
+    };
+    setCurrentSPF(updated);
+    try {
+      if (isEditMode) await handleEditSPF(updated);
+      else await handleCreateSPF(updated);
+    } finally {
+      setSubmitting(false);
+      setIsCancelDialogOpen(false);
     }
   };
 
@@ -1042,7 +1103,10 @@ function StepperView({
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} disabled={submitting} className="rounded-sm h-9 text-xs uppercase font-bold tracking-wider px-6 border-gray-300 hover:bg-gray-100">Cancel</Button>
+            <Button variant="outline" onClick={onClose} disabled={submitting} className="rounded-sm h-9 text-xs uppercase font-bold tracking-wider px-6 border-gray-300 hover:bg-gray-100">Close</Button>
+            {!currentSPF?.is_cancelled && isEditMode && (
+              <Button variant="destructive" onClick={() => setIsCancelDialogOpen(true)} disabled={submitting} className="rounded-sm h-9 text-xs uppercase font-bold tracking-wider px-6">Cancel Request</Button>
+            )}
             {step < STEPS.length ? (
               <Button onClick={handleNext} disabled={submitting || uploadingIdx !== null} className="rounded-sm h-9 text-xs uppercase font-bold tracking-wider px-6 bg-gray-900 hover:bg-gray-800 text-white">Next →</Button>
             ) : (
@@ -1053,6 +1117,15 @@ function StepperView({
             )}
           </div>
         </div>
+
+        {/* Cancel Dialog */}
+        <CancelDialog
+          open={isCancelDialogOpen}
+          onOpenChange={setIsCancelDialogOpen}
+          spfNumber={currentSPF?.spf_number || "SPF-PENDING"}
+          spfId={currentSPF?.id}
+          onConfirm={handleCancel}
+        />
       </DialogContent>
     </Dialog>
   );

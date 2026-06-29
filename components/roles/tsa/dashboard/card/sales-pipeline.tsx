@@ -3,6 +3,25 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Cell,
+} from "recharts";
+
+interface ChartDataItem {
+  name: string;
+  conversion: number;
+  fill: string;
+}
 
 interface SalesPipelineCardProps {
   obCallsCount?: number;
@@ -133,6 +152,29 @@ export const SalesPipelineCard: React.FC<SalesPipelineCardProps> = ({
     newAccountRating = 2;
   }
 
+  // Create chart data using current card's values
+  const chartData: ChartDataItem[] = [
+    {
+      name: "Calls → Quote",
+      conversion: callsToQuotePercentage,
+      fill: "#3b82f6"
+    },
+    {
+      name: "Quote → SO",
+      conversion: quoteToSOPercentage,
+      fill: "#10b981"
+    },
+    {
+      name: "SO → SI",
+      conversion: soToSIPercentage,
+      fill: "#f59e0b"
+    }
+  ];
+
+  const chartConfig = {
+    conversion: { label: "Conversion Rate (%)", color: "#3b82f6" },
+  };
+
   return (
     <Card className="bg-white z-10 text-black flex flex-col">
       <CardContent className="flex-1 flex flex-col items-start justify-start p-6 gap-4">
@@ -235,6 +277,36 @@ export const SalesPipelineCard: React.FC<SalesPipelineCardProps> = ({
               ></div>
             </div>
           </div>
+        </div>
+
+        {/* Conversion metrics chart */}
+        <div className="w-full mt-6">
+          <div className="text-xs font-semibold uppercase tracking-widest text-gray-600 mb-4">
+            Conversion Metrics
+          </div>
+          <ChartContainer config={chartConfig} className="h-64 w-full">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }} 
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis 
+                tick={{ fontSize: 12 }} 
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => `${value}%`}
+              />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="conversion" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ChartContainer>
         </div>
       </CardContent>
     </Card>

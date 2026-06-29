@@ -11,7 +11,7 @@ import { SidebarRight } from "@/components/sidebar-right";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertTitle } from "@/components/ui/alert";
-import { AlertCircleIcon, Plus, Search } from "lucide-react";
+import { AlertCircleIcon, Plus, Search, Trash2 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner"
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -20,13 +20,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, } from "
 import { type DateRange } from "react-day-picker";
 
 import ProtectedPageWrapper from "@/components/protected-page-wrapper";
+import { ProgressCircle } from "@/components/ProgressCircle";
 
 interface DevelopmentPlan {
   id: string;
-  company_name: string;
-  contact_person: string;
-  date_created: string;
+  customer_name: string;
+  account_manager: string;
+  created_at: string;
   status: string;
+  key_contacts?: any[];
+  business_objectives?: any[];
+  growth_opportunities?: any[];
+  action_items?: any[];
+  project_pipeline?: any[];
+  competitors?: any[];
+  risks?: any[];
+  kpis?: any[];
+  projects?: string;
+  product_offering?: string;
+  account_summary?: string;
 }
 
 interface UserDetails {
@@ -36,6 +48,28 @@ interface UserDetails {
   firstname?: string;
   lastname?: string;
 }
+
+// Helper function to calculate progress for a single plan
+const calculatePlanProgress = (plan: DevelopmentPlan) => {
+  const sections = [
+    { completed: plan.customer_name?.trim() !== "" },
+    { completed: plan.account_manager?.trim() !== "" },
+    { completed: plan.status?.trim() !== "" },
+    { completed: plan.projects?.trim() !== "" },
+    { completed: plan.product_offering?.trim() !== "" },
+    { completed: (plan.key_contacts?.length || 0) > 0 },
+    { completed: (plan.business_objectives?.length || 0) > 0 },
+    { completed: (plan.growth_opportunities?.length || 0) > 0 },
+    { completed: (plan.action_items?.length || 0) > 0 },
+    { completed: (plan.project_pipeline?.length || 0) > 0 },
+    { completed: (plan.competitors?.length || 0) > 0 },
+    { completed: (plan.risks?.length || 0) > 0 },
+    { completed: (plan.kpis?.length || 0) > 0 },
+    { completed: plan.account_summary?.trim() !== "" },
+  ];
+  const completed = sections.filter(s => s.completed).length;
+  return { progress: completed, total: sections.length };
+};
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -96,12 +130,55 @@ function DashboardContent() {
     fetchUserData();
   }, [userId]);
 
+  // Fetch account development plans when userId changes
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    const fetchPlans = async () => {
+      setLoadingPlans(true);
+      try {
+        const response = await fetch(`/api/account-development-plan?userId=${encodeURIComponent(userId)}`);
+        if (!response.ok) throw new Error("Failed to fetch plans");
+        const data = await response.json();
+        setPlans(data);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to fetch plans");
+      } finally {
+        setLoadingPlans(false);
+      }
+    };
+
+    fetchPlans();
+  }, [userId]);
+
+  // Handle delete
+  const handleDelete = async (planId: string) => {
+    if (!confirm("Are you sure you want to delete this plan?")) return;
+
+    try {
+      const response = await fetch(`/api/account-development-plan/${planId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete plan");
+
+      // Refresh the plans list
+      setPlans(prev => prev.filter(p => p.id !== planId));
+    } catch (err) {
+      console.error(err);
+      setError("Failed to delete plan");
+    }
+  };
+
   // Filter plans
   const filteredPlans = useMemo(() => {
     if (!globalFilter) return plans;
     return plans.filter(plan =>
-      plan.company_name.toLowerCase().includes(globalFilter.toLowerCase()) ||
-      plan.contact_person.toLowerCase().includes(globalFilter.toLowerCase())
+      (plan.customer_name && plan.customer_name.toLowerCase().includes(globalFilter.toLowerCase())) ||
+      (plan.account_manager && plan.account_manager.toLowerCase().includes(globalFilter.toLowerCase()))
     );
   }, [plans, globalFilter]);
 
@@ -149,7 +226,7 @@ function DashboardContent() {
                     <Input
                       value={globalFilter}
                       onChange={(e) => setGlobalFilter(e.target.value)}
-                      placeholder="Search company or contact..."
+                      placeholder="Search company or account manager..."
                       className="pl-8 h-9 text-sm"
                     />
                   </div>
@@ -167,8 +244,9 @@ function DashboardContent() {
                   <Table>
                     <TableHeader className="bg-slate-50">
                       <TableRow>
+                        <TableHead className="text-xs font-semibold uppercase tracking-wide w-12">Progress</TableHead>
                         <TableHead className="text-xs font-semibold uppercase tracking-wide">Company Name</TableHead>
-                        <TableHead className="text-xs font-semibold uppercase tracking-wide">Contact Person</TableHead>
+                        <TableHead className="text-xs font-semibold uppercase tracking-wide">Account Manager</TableHead>
                         <TableHead className="text-xs font-semibold uppercase tracking-wide">Date Created</TableHead>
                         <TableHead className="text-xs font-semibold uppercase tracking-wide">Status</TableHead>
                         <TableHead className="text-xs font-semibold uppercase tracking-wide text-right">Action</TableHead>
@@ -177,33 +255,47 @@ function DashboardContent() {
                     <TableBody>
                       {filteredPlans.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-10 text-slate-500">
+                          <TableCell colSpan={6} className="text-center py-8 text-xs text-slate-500">
                             No account development plans found
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredPlans.map(plan => (
-                          <TableRow key={plan.id}>
-                            <TableCell className="font-medium">{plan.company_name}</TableCell>
-                            <TableCell>{plan.contact_person}</TableCell>
-                            <TableCell>{new Date(plan.date_created).toLocaleDateString()}</TableCell>
-                            <TableCell>
-                              <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
-                                {plan.status}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => router.push(`/roles/tsa/companies/account-development-plan/${plan.id}`)}
-                                className="h-8 text-xs"
-                              >
-                                Edit
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
+                        filteredPlans.map(plan => {
+                          const { progress, total } = calculatePlanProgress(plan);
+                          return (
+                            <TableRow key={plan.id}>
+                              <TableCell>
+                                <ProgressCircle progress={progress} total={total} size={40} />
+                              </TableCell>
+                              <TableCell className="font-medium">{plan.customer_name || "-"}</TableCell>
+                              <TableCell>{plan.account_manager || "-"}</TableCell>
+                              <TableCell>{new Date(plan.created_at).toLocaleDateString()}</TableCell>
+                              <TableCell>
+                                <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-700">
+                                  {plan.status || "-"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right flex gap-2 justify-end">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => router.push(`/roles/tsa/companies/account-development-plan/${plan.id}`)}
+                                  className="h-8 text-xs"
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDelete(plan.id)}
+                                  className="h-8 text-xs"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { connectToDatabase } from "@/lib/mongodb";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -65,8 +64,18 @@ export async function GET(req: Request) {
       if (rangeEnd) q = q.lte("date_created", rangeEnd);
       return q;
     })();
-    const mongoFrom = new Date(monthStart);
-    const mongoTo   = rangeEnd ? new Date(rangeEnd) : null;
+
+    // ── Client visits via Supabase tasklog ────────────────────────────────────
+    const clientVisitsQuery = (() => {
+      let q = supabase
+        .from("tasklog")
+        .select("id", { count: "exact", head: true })
+        .eq("ReferenceID", referenceid)
+        .eq("Status", "Login")
+        .gte("date_created", monthStart);
+      if (rangeEnd) q = q.lte("date_created", rangeEnd);
+      return q;
+    })();
 
     const [
       userRes,
@@ -76,7 +85,7 @@ export async function GET(req: Request) {
       outboundRes,
       quotationsRes,
       pipelineRes,
-      clientVisitCount,
+      clientVisitsRes,
     ] = await Promise.all([
 
       // 1. User name
@@ -100,16 +109,8 @@ export async function GET(req: Request) {
       // 7. Pipeline records
       pipelineQuery,
 
-      // 8. Client visits — MongoDB TaskLog Login count
-      connectToDatabase().then((db) => {
-        const mongoFilter: any = {
-          ReferenceID: referenceid,
-          Status: "Login",
-          date_created: { $gte: mongoFrom },
-        };
-        if (mongoTo) mongoFilter.date_created.$lte = mongoTo;
-        return db.collection("TaskLog").countDocuments(mongoFilter);
-      }),
+      // 8. Client visits — Supabase tasklog Login count
+      clientVisitsQuery,
     ]);
 
     // ── Running Target ────────────────────────────────────────────────────────
@@ -207,7 +208,7 @@ export async function GET(req: Request) {
         soPercentage,
         obCalls,
         quotationsCount,
-        clientVisits: clientVisitCount,
+        clientVisits: clientVisitsRes.count ?? 0,
         status,
       },
       { status: 200 }

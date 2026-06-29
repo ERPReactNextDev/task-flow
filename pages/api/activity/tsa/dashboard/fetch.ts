@@ -63,7 +63,7 @@ export default async function handler(
 
   try {
     // For multiple tables, we process sequentially to reduce memory usage
-    const tables = ["history", "revised_quotations", "meetings", "documentation", "spf_request", "spf"];
+    const tables = ["activity", "history", "revised_quotations", "meetings", "documentation", "spf_request", "spf"];
     let totalCount = 0;
 
     // Store merged activities in a temporary array if needed for sorting

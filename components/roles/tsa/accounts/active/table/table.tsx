@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   useReactTable,
@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MoreHorizontal, PenIcon } from "lucide-react";
+import { MoreHorizontal, PenIcon, TrendingUp } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { type DateRange } from "react-day-picker";
 import { format } from "date-fns";
@@ -440,20 +440,175 @@ export function AccountsTable({
       {
         id: "actions",
         header: "",
-        cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 border border-zinc-200 transition-all group/edit"
-            style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
-            onClick={() => {
-              setEditingAccount(row.original);
-              setIsEditDialogOpen(true);
-            }}
-          >
-            <PenIcon className="h-3.5 w-3.5 text-zinc-400" />
-          </Button>
-        ),
+        cell: ({ row }) => {
+          const [isHovering, setIsHovering] = useState(false);
+          const [planData, setPlanData] = useState<any[]>([]);
+          const [loading, setLoading] = useState(false);
+          const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+          const fetchPlan = useCallback(async () => {
+            if (!row.original.company_name) return;
+            setLoading(true);
+            try {
+              const res = await fetch(
+                `/api/account-development-plan?company_name=${encodeURIComponent(row.original.company_name)}`
+              );
+              if (res.ok) {
+                const data = await res.json();
+                setPlanData(data);
+              }
+            } catch (err) {
+              console.error(err);
+            } finally {
+              setLoading(false);
+            }
+          }, [row.original.company_name]);
+
+          const handleMouseEnter = () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              setIsHovering(true);
+              fetchPlan();
+            }, 300); // 300ms delay
+          };
+
+          const handleMouseLeave = () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              setIsHovering(false);
+            }, 150); // 150ms delay before closing to let mouse reach tooltip
+          };
+
+          const handleTooltipMouseEnter = () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          };
+
+          const handleTooltipMouseLeave = () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              setIsHovering(false);
+            }, 150);
+          };
+
+          return (
+            <div className="flex items-center gap-1 relative">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-purple-50 hover:text-purple-600 border border-zinc-200 transition-all group/edit"
+                      style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
+                      onClick={() => {
+                        setEditingAccount(row.original);
+                        setIsEditDialogOpen(true);
+                      }}
+                    >
+                      <PenIcon className="h-3.5 w-3.5 text-zinc-400" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit Account</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 hover:bg-purple-50 hover:text-purple-600 border border-zinc-200 transition-all group/edit"
+                      style={{ borderRadius: `${tableStyles.table_border_radius}px` }}
+                      onMouseEnter={handleMouseEnter}
+                      onMouseLeave={handleMouseLeave}
+                      onClick={() => {
+                        // Optional: Navigate to account dev plan page if needed
+                      }}
+                    >
+                      <TrendingUp className="h-3.5 w-3.5 text-zinc-400" />
+                    </Button>
+                  </TooltipTrigger>
+                  {isHovering && (
+                    <TooltipContent
+                      className="max-w-2xl p-4 bg-white text-slate-900 border border-slate-200 shadow-lg"
+                      side="right"
+                      align="start"
+                      onMouseEnter={handleTooltipMouseEnter}
+                      onMouseLeave={handleTooltipMouseLeave}
+                    >
+                      {loading ? (
+                        <div className="text-xs text-gray-500">Loading...</div>
+                      ) : planData.length > 0 ? (
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-xs font-bold text-gray-700">Account Development Plan</div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-[10px] h-6 px-2"
+                                onClick={() => {
+                                  if (planData.length > 0) {
+                                    router.push(`/roles/tsa/companies/account-development-plan/${planData[0].id}`);
+                                  } else {
+                                    router.push(`/roles/tsa/companies/account-development-plan/new?customer_name=${encodeURIComponent(row.original.company_name)}&industry=${encodeURIComponent(row.original.industry)}`);
+                                  }
+                                }}
+                              >
+                                {planData.length > 0 ? "Edit" : "Create"}
+                              </Button>
+                            </div>
+                            {planData.slice(0, 3).map((plan) => (
+                              <div key={plan.id} className="border-t border-gray-100 pt-2 space-y-1">
+                                <div className="text-xs font-semibold text-gray-800">
+                                  {plan.customer_name}
+                                </div>
+                                <div className="text-[10px] text-gray-500">
+                                  Status: {plan.status || "—"}
+                                </div>
+                                {plan.account_summary && (
+                                  <div className="text-[10px] text-gray-600 line-clamp-2">
+                                    {plan.account_summary}
+                                  </div>
+                                )}
+                                {plan.key_contacts && plan.key_contacts.length > 0 && (
+                                  <div className="text-[10px] text-gray-500">
+                                    Key Contacts: {plan.key_contacts.map((c: any) => c.name).join(", ")}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                            {planData.length > 3 && (
+                              <div className="text-[10px] text-blue-500">
+                                +{planData.length - 3} more
+                              </div>
+                            )}
+                          </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs font-bold text-gray-700">Account Development Plan</div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-[10px] h-6 px-2"
+                              onClick={() => {
+                                router.push(`/roles/tsa/companies/account-development-plan/new?customer_name=${encodeURIComponent(row.original.company_name)}&industry=${encodeURIComponent(row.original.industry)}`);
+                              }}
+                            >
+                              Create
+                            </Button>
+                          </div>
+                          <div className="text-xs text-gray-500">No account development plan found</div>
+                        </div>
+                      )}
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "status",
