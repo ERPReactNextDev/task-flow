@@ -481,30 +481,21 @@ function DashboardContent() {
   /* ---- Fetch Site Visits ---- */
   const fetchSiteVisits = useCallback(async () => {
     const { referenceid } = userDetails;
-    if (!referenceid) {
-      setSiteVisitCount(0);
-      return;
-    }
+    if (!referenceid) { setSiteVisitCount(0); return; }
     setLoadingSiteVisits(true);
     try {
-      const url = `/api/fetch-tasklog?referenceid=${encodeURIComponent(referenceid)}`;
-      const res = await fetch(url);
+      const url = new URL("/api/fetch-tasklog-supabase", window.location.origin);
+      url.searchParams.append("referenceid", referenceid);
+      if (dateCreatedFilterRange?.from)
+        url.searchParams.append("from", toDateStr(dateCreatedFilterRange.from));
+      if (dateCreatedFilterRange?.to)
+        url.searchParams.append("to", toDateStr(dateCreatedFilterRange.to));
+      const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch site visits");
       const data = await res.json();
-      // Filter by date range (local date strings, Asia/Manila) and count unique accounts (Login status only)
-      const from = dateCreatedFilterRange?.from ? toLocalDateString(dateCreatedFilterRange.from) : null;
-      const to = dateCreatedFilterRange?.to ? toLocalDateString(dateCreatedFilterRange.to) : null;
-      const visitedAccounts = new Set<string>();
-      (data.siteVisits || []).forEach((visit: any) => {
-        if (!visit.date_created) return;
-        const visitDate = toLocalDateString(new Date(visit.date_created));
-        if (from && visitDate < from) return;
-        if (to && visitDate > to) return;
-        if (visit.Status === "Login" && visit.SiteVisitAccount) {
-          visitedAccounts.add(visit.SiteVisitAccount);
-        }
-      });
-      setSiteVisitCount(visitedAccounts.size);
+      // Count raw Login entries — matches SiteVisitCard and dashboard-tsa-performance
+      const count = (data.siteVisits || []).filter((v: any) => v.Status === "Login").length;
+      setSiteVisitCount(count);
     } catch (err) {
       console.error("Error fetching site visits:", err);
     } finally {
