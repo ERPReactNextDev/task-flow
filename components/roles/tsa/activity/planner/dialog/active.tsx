@@ -213,7 +213,7 @@ const DEFAULT_FORM: AccountFormData = {
   email_address: [""],
   address: "",
   region: "",
-  status: "For Approval",
+  status: "Active",
   delivery_address: "",
   type_client: "New Client",
   industry: "",
