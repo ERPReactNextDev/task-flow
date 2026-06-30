@@ -661,10 +661,9 @@ export const SalesTable: React.FC<SalesProps> = ({
         ? ['proratedQuota', 'totalActualSales', 'variance']
         : ['totalProratedQuota', 'totalActualSales', 'totalVariance'];
 
-      currencyCols.forEach(key => {
-        const col = worksheet.getColumn(key);
-        if (col && col.number > 0) col.numFmt = '#,##0.00" ₱"';
-      });
+    currencyCols.forEach(key => {
+      worksheet.getColumn(key).numFmt = '#,##0.00" ₱"';
+    });
 
       // Generate filename
       let filename = selectedTSMId ? `Sales_Performance_${selectedTSMName.replace(/\s+/g, '_')}` : "Sales_Performance_Summary";
