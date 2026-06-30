@@ -8,7 +8,14 @@ import {
   TicketIcon,
   CalendarCheck2,
   LoaderPinwheel,
+  TrendingUp,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Accordion,
   AccordionContent,
@@ -557,6 +564,131 @@ export const NewTask: React.FC<NewTaskProps> = ({
     endorsedSoundRef.current.volume = 0.9;
   }, []);
 
+  // ─── Search Result Item Component ─────────────────────────────────────────
+
+  const SearchResultItem = ({ account }: { account: Account }) => {
+    const [isHovering, setIsHovering] = useState(false);
+    const [planData, setPlanData] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const fetchPlan = useCallback(async () => {
+      if (!account.company_name) return;
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/account-development-plan?company_name=${encodeURIComponent(account.company_name)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setPlanData(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, [account.company_name]);
+
+    const handleMouseEnter = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        setIsHovering(true);
+        fetchPlan();
+      }, 300); // 300ms delay
+    };
+
+    const handleMouseLeave = () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setIsHovering(false);
+    };
+
+    return (
+      <AccordionItem key={account.id} value={account.id}>
+        <div className="flex justify-between items-center p-2 select-none">
+          <AccordionTrigger className="flex flex-1 items-center justify-between text-xs font-semibold font-mono">
+            <span>{account.company_name}</span>
+            {account.next_available_date && (
+              <Badge className="bg-green-600">
+                <CalendarCheck2 /> Scheduled{" "}
+                {new Date(account.next_available_date).toLocaleDateString("en-CA")}
+              </Badge>
+            )}
+          </AccordionTrigger>
+          <div className="flex gap-2 ml-4 items-center">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 hover:bg-purple-50 hover:text-purple-600 border border-slate-200 transition-all"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <TrendingUp className="h-3.5 w-3.5 text-zinc-400" />
+                  </Button>
+                </TooltipTrigger>
+                {isHovering && (
+                  <TooltipContent
+                    className="max-w-2xl p-4 bg-white text-slate-900 border border-slate-200 shadow-lg"
+                    side="right"
+                    align="start"
+                    onPointerEnter={() => setIsHovering(true)}
+                    onPointerLeave={() => setIsHovering(false)}
+                  >
+                    {loading ? (
+                      <div className="text-xs text-gray-500">Loading...</div>
+                    ) : planData.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="text-xs font-bold text-gray-700">Account Development Plan</div>
+                        {planData.slice(0, 3).map((plan) => (
+                          <div key={plan.id} className="border-t border-slate-100 pt-2 space-y-1">
+                            <div className="text-xs font-semibold text-gray-800">
+                              {plan.customer_name}
+                            </div>
+                            <div className="text-[10px] text-gray-500">
+                              Status: {plan.status || "—"}
+                            </div>
+                            {plan.account_summary && (
+                              <div className="text-[10px] text-gray-600 line-clamp-2">
+                                {plan.account_summary}
+                              </div>
+                            )}
+                            {plan.key_contacts && plan.key_contacts.length > 0 && (
+                              <div className="text-[10px] text-gray-500">
+                                Key Contacts: {plan.key_contacts.map((c: any) => c.name).join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {planData.length > 3 && (
+                          <div className="text-[10px] text-blue-500">
+                            +{planData.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">No account development plan found</div>
+                    )}
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+            <AddButton account={account} />
+          </div>
+        </div>
+        <AccordionContent className="flex flex-col gap-2 p-3 text-xs">
+          <p><strong>Contact:</strong> {account.contact_number}</p>
+          <p><strong>Email:</strong> {account.email_address}</p>
+          <p><strong>Client Type:</strong> {account.type_client}</p>
+          <p><strong>Address:</strong> {account.address}</p>
+          <p className="text-[8px]">{account.account_reference_number}</p>
+        </AccordionContent>
+      </AccordionItem>
+    );
+  };
+
   // ─── Add button ───────────────────────────────────────────────────────────
 
   const AddButton = ({ account }: { account: Account }) => (
@@ -739,29 +871,7 @@ export const NewTask: React.FC<NewTaskProps> = ({
                   className="w-full border rounded-none shadow-sm mt-2 border-blue-200 uppercase"
                 >
                   {filteredAccounts.map((account) => (
-                    <AccordionItem key={account.id} value={account.id}>
-                      <div className="flex justify-between items-center p-2 select-none">
-                        <AccordionTrigger className="flex flex-1 items-center justify-between text-xs font-semibold font-mono">
-                          <span>{account.company_name}</span>
-                          {account.next_available_date && (
-                            <Badge className="bg-green-600">
-                              <CalendarCheck2 /> Scheduled{" "}
-                              {new Date(account.next_available_date).toLocaleDateString("en-CA")}
-                            </Badge>
-                          )}
-                        </AccordionTrigger>
-                        <div className="flex gap-2 ml-4">
-                          <AddButton account={account} />
-                        </div>
-                      </div>
-                      <AccordionContent className="flex flex-col gap-2 p-3 text-xs">
-                        <p><strong>Contact:</strong> {account.contact_number}</p>
-                        <p><strong>Email:</strong> {account.email_address}</p>
-                        <p><strong>Client Type:</strong> {account.type_client}</p>
-                        <p><strong>Address:</strong> {account.address}</p>
-                        <p className="text-[8px]">{account.account_reference_number}</p>
-                      </AccordionContent>
-                    </AccordionItem>
+                    <SearchResultItem key={account.id} account={account} />
                   ))}
                 </Accordion>
               )}

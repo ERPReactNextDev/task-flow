@@ -144,6 +144,20 @@ function barColor(score: number): string {
   return "#ef4444";
 }
 
+function getStripedBackground(color: string): string {
+  // Lighten the color by mixing with white
+  const lightenColor = (hex: string, percent: number): string => {
+    const num = parseInt(hex.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = Math.min(255, (num >> 16) + amt);
+    const G = Math.min(255, ((num >> 8) & 0x00FF) + amt);
+    const B = Math.min(255, (num & 0x0000FF) + amt);
+    return `#${(0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1)}`;
+  };
+  const lightColor = lightenColor(color, 30);
+  return `repeating-linear-gradient(45deg, ${color}20, ${color}20 10px, ${lightColor}20 10px, ${lightColor}20 20px)`;
+}
+
 // ─── KPI row type ─────────────────────────────────────────────────────────────
 
 interface KpiRow {
@@ -361,7 +375,13 @@ export const KpiWeightedScores: React.FC<KpiWeightedScoresProps> = ({
           <div className="flex flex-col md:flex-row gap-6">
 
             {/* ── Score summary ── */}
-            <div className="bg-gray-50 rounded-xl p-5 flex flex-col gap-3 min-w-[200px] md:w-56 shrink-0">
+            <div 
+              className="rounded-xl p-5 flex flex-col gap-3 min-w-[200px] md:w-56 shrink-0"
+              style={{ 
+                backgroundImage: getStripedBackground(barColor(totalScore)),
+                backgroundSize: "20px 20px"
+              }}
+            >
               <p className="text-sm font-semibold text-gray-800">{name}</p>
               <p className={`text-5xl font-extrabold leading-none ${statusColor}`}>
                 {totalScore.toFixed(2)}

@@ -131,12 +131,21 @@ export default async function handler(
     );
 
     /* -------------------- 6️⃣ NORMALIZE + MERGE -------------------- */
+    const normalizeActivity = (item: any, tableSource: string) => {
+      return {
+        ...item,
+        table_source: tableSource,
+        // Normalize company name: use company_name if available, otherwise customer_name
+        company_name: item.company_name || item.customer_name || item.company,
+      };
+    };
+
     let activities = [
-      ...(activityData || []).map((item) => ({ ...item, table_source: "activity" })),
-      ...(historyData || []).map((item) => ({ ...item, table_source: "history" })),
-      ...(revisedData || []).map((item) => ({ ...item, table_source: "revised_quotations" })),
-      ...(meetingsData || []).map((item) => ({ ...item, table_source: "meeting" })),
-      ...(documentationData || []).map((item) => ({ ...item, table_source: "documentation" })),
+      ...(activityData || []).map((item) => normalizeActivity(item, "activity")),
+      ...(historyData || []).map((item) => normalizeActivity(item, "history")),
+      ...(revisedData || []).map((item) => normalizeActivity(item, "revised_quotations")),
+      ...(meetingsData || []).map((item) => normalizeActivity(item, "meeting")),
+      ...(documentationData || []).map((item) => normalizeActivity(item, "documentation")),
     ].sort(
       (a, b) =>
         new Date(b.date_created).getTime() - new Date(a.date_created).getTime()

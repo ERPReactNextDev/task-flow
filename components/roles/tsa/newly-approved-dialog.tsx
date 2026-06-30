@@ -45,8 +45,8 @@ export function NewlyApprovedDialog({ referenceid }: { referenceid: string }) {
   const fetch = useCallback(async () => {
     if (!referenceid) return;
 
-    // Already dismissed today — skip fetch
-    if (localStorage.getItem(getDismissKey(referenceid)) === "1") return;
+    // Temporarily bypass dismiss check for testing — re-enable after confirming
+    // if (localStorage.getItem(getDismissKey(referenceid)) === "1") return;
 
     try {
       const res = await window.fetch(

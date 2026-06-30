@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, ShieldCheck, ShieldX, SendToBack, FileText, Package, Building2, X, ZoomIn } from "lucide-react";
 import { supabase } from "@/utils/supabase";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -272,6 +274,9 @@ export function RequestDialog({
   const [loadingOffers, setLoadingOffers] = useState(false);
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonOthers, setCancelReasonOthers] = useState("");
 
   const openFullImage = (url: string) => {
     setFullImageUrl(url);
@@ -308,15 +313,29 @@ export function RequestDialog({
   }, [open, isReadyForQuotation, currentSPF?.spf_number]);
 
   // ── Submit ──
-  const handleSubmit = async (status: "Approved" | "Endorsed to Sales Head" | "Declined by TSM") => {
+  const handleSubmit = async (status: "Approved" | "Endorsed to Sales Head" | "Declined by TSM" | "Cancelled", cancelData?: { is_cancelled_reason: string; is_cancelled_reason_others_remarks: string; remarks: string }) => {
     setSubmitting(true);
-    const updated = { ...currentSPF, approved_by: fullName, status };
+    let updated = { ...currentSPF, approved_by: fullName, status };
+    if (status === "Cancelled" && cancelData) {
+      updated = {
+        ...updated,
+        is_cancelled: true,
+        is_cancelled_reason: cancelData.is_cancelled_reason,
+        is_cancelled_reason_others_remarks: cancelData.is_cancelled_reason_others_remarks,
+        remarks: cancelData.remarks,
+      };
+    }
     setCurrentSPF(updated);
     try {
       if (isEditMode) await handleEditSPF(updated);
       else await handleCreateSPF(updated);
     } finally {
       setSubmitting(false);
+      if (status === "Cancelled") {
+        setIsCancelDialogOpen(false);
+        setCancelReason("");
+        setCancelReasonOthers("");
+      }
     }
   };
 
@@ -607,7 +626,8 @@ export function RequestDialog({
             currentSPF?.status?.includes("Approved By Procurement") ||
             ["Processed by PD"].includes(currentSPF?.status || "") ||
             currentSPF?.status?.includes("Approved by TSM") ||
-            currentSPF?.status?.includes("Approved by Sales Head")
+            currentSPF?.status?.includes("Approved by Sales Head") ||
+            currentSPF?.is_cancelled
           ) && (
               <div style={{ position: "sticky", bottom: 0, zIndex: 10, background: "#1f2937", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #374151" }}>
                 <button
@@ -621,6 +641,17 @@ export function RequestDialog({
                 </button>
 
                 <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => setIsCancelDialogOpen(true)}
+                    disabled={submitting}
+                    style={{ ...F, fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", color: "#fecaca", background: "#7f1d1d", border: "1px solid #dc2626", padding: "7px 16px", cursor: submitting ? "not-allowed" : "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", opacity: submitting ? 0.6 : 1 }}
+                    onMouseEnter={(e) => { if (!submitting) e.currentTarget.style.background = "#991b1b"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "#7f1d1d"; }}
+                  >
+                    {submitting ? <Loader2 style={{ width: "10px", height: "10px", animation: "spin 1s linear infinite" }} /> : <ShieldX style={{ width: "10px", height: "10px" }} />}
+                    Cancel
+                  </button>
+
                   <button
                     onClick={() => handleSubmit("Endorsed to Sales Head")}
                     disabled={submitting}
@@ -642,7 +673,7 @@ export function RequestDialog({
                     {submitting ? <Loader2 style={{ width: "10px", height: "10px", animation: "spin 1s linear infinite" }} /> : <ShieldCheck style={{ width: "10px", height: "10px" }} />}
                     Approved
                   </button>
-                  
+
                 </div>
               </div>
             )}
@@ -671,6 +702,71 @@ export function RequestDialog({
               <div style={{ padding: "40px", color: "#9ca3af" }}>No image</div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Dialog */}
+      <Dialog open={isCancelDialogOpen} onOpenChange={(v) => { if (!v) { setIsCancelDialogOpen(false); setCancelReason(""); setCancelReasonOthers(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogTitle>Cancel SPF Request</DialogTitle>
+          <DialogDescription>Please provide a reason for cancelling this SPF request.</DialogDescription>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Reason for Cancellation</label>
+              <select
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="">Select a reason</option>
+                <option value="Duplicate Request">Duplicate Request</option>
+                <option value="Customer Changed Mind">Customer Changed Mind</option>
+                <option value="Insufficient Information">Insufficient Information</option>
+                <option value="Pricing Issue">Pricing Issue</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            {cancelReason === "Other" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Other Reason</label>
+                <Input
+                  placeholder="Please specify"
+                  value={cancelReasonOthers}
+                  onChange={(e) => setCancelReasonOthers(e.target.value)}
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Additional Remarks</label>
+              <Textarea
+                placeholder="Add any additional remarks..."
+                value={currentSPF?.remarks || ""}
+                onChange={(e) => {
+                  const updated = { ...currentSPF, remarks: e.target.value };
+                  setCurrentSPF(updated);
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setIsCancelDialogOpen(false); setCancelReason(""); setCancelReasonOthers(""); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => handleSubmit("Cancelled", {
+                is_cancelled_reason: cancelReason,
+                is_cancelled_reason_others_remarks: cancelReasonOthers,
+                remarks: currentSPF?.remarks || "",
+              })}
+              disabled={!cancelReason || (cancelReason === "Other" && !cancelReasonOthers)}
+            >
+              Confirm Cancel
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Dialog>

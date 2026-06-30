@@ -31,6 +31,7 @@ interface Account {
   company_name: string; type_client: string; date_created: string;
   contact_person: string; contact_number: string; email_address: string;
   address?: string; delivery_address?: string; region: string; industry: string; status?: string;
+  company_group?: string;
 }
 interface Activity {
   id?: string; company_name?: string; account_reference_number?: string;
@@ -361,11 +362,12 @@ function HistoryDialog({ open, onClose, companyName, loading, records, account }
               {account?.email_address && <div className="flex items-center gap-2 text-[11px]"><Mail size={11} className="text-slate-500 shrink-0" /><span className="text-slate-300 font-mono break-all">{account.email_address}</span></div>}
               {(account?.address || account?.delivery_address) && <div className="flex items-start gap-2 text-[11px]"><MapPin size={11} className="text-slate-500 shrink-0 mt-px" /><span className="text-slate-300 font-mono">{account.address ?? account.delivery_address}</span></div>}
             </div>
-            {(account?.region || account?.industry) && (
+            {(account?.region || account?.industry || account?.company_group) && (
               <div className="px-6 py-4 border-b border-white/5 space-y-2">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mb-1">Details</p>
-                {account?.region && <div className="flex items-start gap-2 text-[11px]"><span className="text-slate-500 font-mono w-16 shrink-0">Region</span><span className="text-slate-300 font-mono">{account.region}</span></div>}
-                {account?.industry && <div className="flex items-start gap-2 text-[11px]"><span className="text-slate-500 font-mono w-16 shrink-0">Industry</span><span className="text-slate-300 font-mono">{account.industry}</span></div>}
+                {account?.region && <div className="flex items-start gap-2 text-[11px]"><span className="text-slate-500 font-mono w-20 shrink-0">Region</span><span className="text-slate-300 font-mono">{account.region}</span></div>}
+                {account?.industry && <div className="flex items-start gap-2 text-[11px]"><span className="text-slate-500 font-mono w-20 shrink-0">Industry</span><span className="text-slate-300 font-mono">{account.industry}</span></div>}
+                {account?.company_group && <div className="flex items-start gap-2 text-[11px]"><span className="text-slate-500 font-mono w-20 shrink-0">Subsidiaries</span><span className="text-slate-300 font-mono">{account.company_group}</span></div>}
               </div>
             )}
             <div className="px-6 py-4 border-b border-white/5 space-y-3">
@@ -939,14 +941,14 @@ function DashboardContent() {
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-gray-50 border-b border-gray-100">
-                              {["Actions", "Activities", "Last Touch", "Company", "Type"].map((h) => (
+                              {["Actions", "Activities", "Last Touch", "Company", "Type", "Industry", "Subsidiaries"].map((h) => (
                                 <TableHead key={h} className="text-[10px] font-bold uppercase tracking-wider text-gray-400 py-3">{h}</TableHead>
                               ))}
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {filteredAccounts.length === 0 ? (
-                              <TableRow><TableCell colSpan={5} className="text-center py-14 text-sm text-gray-400">{search || typeFilter ? "No accounts match your filters" : "No accounts found"}</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={7} className="text-center py-14 text-sm text-gray-400">{search || typeFilter ? "No accounts match your filters" : "No accounts found"}</TableCell></TableRow>
                             ) : paginatedAccounts.map((account) => {
                               const actCount = activityCountMap[account.account_reference_number?.toLowerCase() ?? ""] ?? 0;
                               const hasAct = actCount > 0;
@@ -982,6 +984,8 @@ function DashboardContent() {
                                       <span className={`w-1.5 h-1.5 rounded-full ${typeStyle.dot}`} /> {account.type_client?.toUpperCase()}
                                     </span>
                                   </TableCell>
+                                  <TableCell className="text-[11px] text-gray-600">{account.industry ?? "—"}</TableCell>
+                                  <TableCell className="text-[11px] text-gray-600">{account.company_group ?? "—"}</TableCell>
                                 </TableRow>
                               );
                             })}

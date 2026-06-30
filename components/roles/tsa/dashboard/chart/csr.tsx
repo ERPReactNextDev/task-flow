@@ -79,6 +79,7 @@ export function CSRMetricsCard({
     avgResponseTime: number;
     avgQuotationHT: number;
     avgNonQuotationHT: number;
+    avgSpfHT: number;
   }) => void;
 }) {
   const today = new Date().toISOString().split("T")[0];
@@ -223,6 +224,7 @@ export function CSRMetricsCard({
         let rtTotal = 0, rtCount = 0;
         let nqTotal = 0, nqCount = 0;
         let qTotal  = 0, qCount  = 0;
+        let spfTotal = 0, spfCount = 0;
 
         data.forEach((row) => {
           if (row.status !== "Closed" && row.status !== "Converted into Sales") return;
@@ -250,7 +252,9 @@ export function CSRMetricsCard({
           const remarks = (row.remarks || "").toUpperCase();
           if (remarks === "QUOTATION FOR APPROVAL" || remarks === "SOLD") {
             qTotal += baseHT; qCount++;
-          } else if (!remarks.includes("SPF")) {
+          } else if (remarks.includes("SPF")) {
+            spfTotal += baseHT; spfCount++;
+          } else {
             nqTotal += baseHT; nqCount++;
           }
         });
@@ -259,6 +263,7 @@ export function CSRMetricsCard({
           avgResponseTime:   rtCount ? rtTotal / rtCount : 0,
           avgQuotationHT:    qCount  ? qTotal  / qCount  : 0,
           avgNonQuotationHT: nqCount ? nqTotal / nqCount : 0,
+          avgSpfHT:          spfCount ? spfTotal / spfCount : 0,
         });
       } catch {
         // silently fail — KPI score will default to rating 1
