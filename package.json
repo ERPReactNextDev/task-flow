@@ -1,4 +1,5 @@
 {
+  "npmrc": "--legacy-peer-deps",
   "name": "taskflow",
   "version": "0.1.0",
   "private": true,
