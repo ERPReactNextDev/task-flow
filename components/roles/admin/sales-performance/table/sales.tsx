@@ -882,8 +882,7 @@ export const SalesTable: React.FC<SalesProps> = ({
 
       // Format currency columns
       ['quota', 'sales', 'variance'].forEach(key => {
-        const col = worksheet.getColumn(key);
-        if (col && col.number > 0) col.numFmt = '#,##0.00" ₱"';
+        worksheet.getColumn(key).numFmt = '#,##0.00" ₱"';
       });
 
       // Filename

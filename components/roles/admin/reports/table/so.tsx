@@ -360,10 +360,7 @@ export const SOTable: React.FC<SOProps> = ({
       totalsRowIndex.font = { bold: true };
 
       // Format currency column
-      const amountCol = worksheet.getColumn('totalSOAmount');
-      if (amountCol && amountCol.number > 0) {
-        amountCol.numFmt = '#,##0.00" ₱"';
-      }
+      worksheet.getColumn('totalSOAmount').numFmt = '#,##0.00" ₱"';
 
       // Generate filename with date range
       let filename = "Admin_Sales_Order_Summary";
