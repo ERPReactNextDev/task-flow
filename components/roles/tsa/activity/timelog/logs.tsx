@@ -85,22 +85,9 @@ function LogRow({ log, onView }: { log: TimeLog; onView: (log: TimeLog) => void 
   const [expanded, setExpanded] = useState(false);
   const style = getTypeStyle(log.Type);
 
-  const [tableStyles, setTableStyles] = useState({
-    table_border_radius: "16",
-  });
-
-  useEffect(() => {
-    fetch("/api/table-styles")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data?.table_styles) setTableStyles(data.table_styles);
-      })
-      .catch(() => { }); // silently fall back to defaults
-  }, []);
-
   return (
     <div className="border border-slate-200 overflow-hidden transition-shadow hover:shadow-sm"
-      style={{ borderRadius: `${tableStyles.table_border_radius}px`, }}>
+      style={{ borderRadius: "16px" }}>
       {/* Collapsed header */}
       <button
         type="button"
@@ -177,9 +164,6 @@ export function TimeLogComponent({
   const timeOutCount = filteredLogs.filter((l) => l.Status === "Logout").length;
 
   const hasDateFilter = !!(dateCreatedFilterRange?.from || dateCreatedFilterRange?.to);
-  const [tableStyles, setTableStyles] = useState({
-    table_border_radius: "16",
-  });
 
   return (
     <>
@@ -249,7 +233,7 @@ export function TimeLogComponent({
 
           {selectedLog && (
             <div className="space-y-3 py-1">
-              <div className="border border-slate-200 bg-slate-50 divide-y divide-slate-100 overflow-hidden text-[11px]" style={{ borderRadius: `${tableStyles.table_border_radius}px`, }}>
+              <div className="border border-slate-200 bg-slate-50 divide-y divide-slate-100 overflow-hidden text-[11px]" style={{ borderRadius: "16px" }}>
                 <div className="flex items-center gap-3 px-4 py-2.5">
                   <span className="font-semibold text-slate-500 w-16 shrink-0">Type</span>
                   <span className={`font-bold uppercase ${getTypeStyle(selectedLog.Type).text}`}>

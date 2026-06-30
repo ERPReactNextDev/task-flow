@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -106,8 +106,8 @@ export function AccountsTable({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [dialogSearch, setDialogSearch] = useState("");
 
-  // ── Table styles from API ─────────────────────────────────────────────────
-  const [tableStyles, setTableStyles] = useState({
+  // ── Table styles ─────────────────────────────────────────────────
+  const tableStyles = {
     th_bg: "#f9fafb",
     layout: "datatable",
     td_text: "#111827",
@@ -146,15 +146,7 @@ export function AccountsTable({
     pagination_active_bg: "#3b82f6",
     toolbar_input_border: "#d1d5db",
     pagination_active_text: "#ffffff"
-
-  });
-
-  useEffect(() => {
-    fetch("/api/table-styles")
-      .then((res) => res.json())
-      .then((data) => { if (data?.table_styles) setTableStyles(data.table_styles); })
-      .catch(() => { });
-  }, []);
+  };
 
   // ── Effects ──
   useEffect(() => {

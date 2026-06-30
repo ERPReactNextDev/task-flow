@@ -10,70 +10,48 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const referenceId = url.searchParams.get("referenceid");
-    const now = new Date();
-    const currentYear = now.getFullYear().toString();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
 
     if (!referenceId) {
-      return NextResponse.json(
-        { success: false, error: "Missing reference ID." },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Missing reference ID." }, { status: 400 });
     }
 
-    const startDate = `${currentYear}-${currentMonth}-01T00:00:00Z`;
+    const now = new Date();
+    const startDate = from
+      ? `${from}T00:00:00Z`
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01T00:00:00Z`;
+    const endDate = to ? `${to}T23:59:59Z` : null;
 
-    // Fetch all relevant records for the month
-    const { data: historyData, error: historyError } = await supabase
+    let query = supabase
       .from("history")
       .select("activity_reference_number, source, type_activity")
       .eq("referenceid", referenceId)
       .gte("date_created", startDate);
 
+    if (endDate) query = query.lte("date_created", endDate);
+
+    const { data: historyData, error: historyError } = await query;
     if (historyError) throw historyError;
 
-    // Group records by activity_reference_number
-    const activityGroups = new Map();
+    const activityGroups = new Map<string, { hasOutbound: boolean; hasQuotation: boolean }>();
 
     historyData?.forEach(record => {
       if (!record.activity_reference_number) return;
-
-      if (!activityGroups.has(record.activity_reference_number)) {
-        activityGroups.set(record.activity_reference_number, {
-          hasOutbound: false,
-          hasQuotation: false
-        });
-      }
-
-      const group = activityGroups.get(record.activity_reference_number);
-
-      if (record.source === "Outbound - Touchbase") {
-        group.hasOutbound = true;
-      }
-
-      if (record.type_activity === "Quotation Preparation") {
-        group.hasQuotation = true;
-      }
+      if (!activityGroups.has(record.activity_reference_number))
+        activityGroups.set(record.activity_reference_number, { hasOutbound: false, hasQuotation: false });
+      const group = activityGroups.get(record.activity_reference_number)!;
+      if (record.source === "Outbound - Touchbase") group.hasOutbound = true;
+      if (record.type_activity === "Quotation Preparation") group.hasQuotation = true;
     });
 
-    // Count groups that have both
     let count = 0;
-    activityGroups.forEach(group => {
-      if (group.hasOutbound && group.hasQuotation) {
-        count++;
-      }
-    });
+    activityGroups.forEach(group => { if (group.hasOutbound && group.hasQuotation) count++; });
 
-    return NextResponse.json(
-      { success: true, count },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, count }, { status: 200 });
   } catch (err: any) {
     console.error("Error fetching calls to quotes:", err);
-    return NextResponse.json(
-      { success: false, error: err.message || "Failed to fetch calls to quotes." },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: err.message || "Failed to fetch calls to quotes." }, { status: 500 });
   }
 }
 

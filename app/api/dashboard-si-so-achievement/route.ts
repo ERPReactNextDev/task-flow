@@ -18,22 +18,27 @@ export async function GET(req: Request) {
       );
     }
 
-    // Current month start date
     const now = new Date();
-    const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01T00:00:00Z`;
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
+
+    const startDate = from
+      ? `${from}T00:00:00Z`
+      : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01T00:00:00Z`;
+    const endDate = to ? `${to}T23:59:59Z` : null;
 
     // Fetch user's name and history in parallel
+    let historyQuery = supabase
+      .from("history")
+      .select("activity_reference_number, source, type_activity")
+      .eq("referenceid", referenceid)
+      .gte("date_created", startDate);
+
+    if (endDate) historyQuery = historyQuery.lte("date_created", endDate);
+
     const [userRes, historyRes] = await Promise.all([
-      supabase
-        .from("users")
-        .select("Firstname, Lastname")
-        .eq("ReferenceID", referenceid)
-        .single(),
-      supabase
-        .from("history")
-        .select("activity_reference_number, source, type_activity")
-        .eq("referenceid", referenceid)
-        .gte("date_created", startDate),
+      supabase.from("users").select("Firstname, Lastname").eq("ReferenceID", referenceid).single(),
+      historyQuery,
     ]);
 
     if (userRes.error) throw userRes.error;

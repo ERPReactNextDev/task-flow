@@ -30,6 +30,7 @@ interface SiSoAchievementCardProps {
   siTarget?: number;
   /** SO target % — default 30 */
   soTarget?: number;
+  dateRange?: { from?: Date; to?: Date };
 }
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
@@ -138,6 +139,7 @@ export const SiSoAchievementCard: React.FC<SiSoAchievementCardProps> = ({
   referenceid,
   siTarget = 70,
   soTarget = 30,
+  dateRange,
 }) => {
   const [data, setData] = useState<AchievementData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -147,9 +149,11 @@ export const SiSoAchievementCard: React.FC<SiSoAchievementCardProps> = ({
     if (!referenceid) return;
     setLoading(true);
     setError(null);
-    fetch(
-      `/api/dashboard-si-so-achievement?referenceid=${encodeURIComponent(referenceid)}`
-    )
+    const url = new URL("/api/dashboard-si-so-achievement", window.location.origin);
+    url.searchParams.append("referenceid", referenceid);
+    if (dateRange?.from) url.searchParams.append("from", dateRange.from.toISOString().slice(0, 10));
+    if (dateRange?.to)   url.searchParams.append("to",   dateRange.to.toISOString().slice(0, 10));
+    fetch(url.toString())
       .then(async (res) => {
         if (!res.ok) throw new Error("Failed to fetch SI/SO data");
         return res.json();
@@ -168,7 +172,7 @@ export const SiSoAchievementCard: React.FC<SiSoAchievementCardProps> = ({
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, dateRange]);
 
   const siChartData = data ? [{ name: data.name, value: data.siPercentage }] : [];
   const soChartData = data ? [{ name: data.name, value: data.soPercentage }] : [];

@@ -13,9 +13,8 @@ async function* fetchTableBatches(
 ) {
   let lastId: number | null = null;
   let totalFetched = 0;
-  const MAX_RECORDS = 5000;
 
-  while (totalFetched < MAX_RECORDS) {
+  while (true) {
     let query = supabase
       .from(table)
       .select(fields)

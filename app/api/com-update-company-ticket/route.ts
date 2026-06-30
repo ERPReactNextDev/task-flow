@@ -11,13 +11,13 @@ const Xchire_sql = neon(Xchire_databaseUrl);
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { account_reference_number, referenceid, tsm, manager } = body;
+    const { id, referenceid, tsm, manager } = body;
 
-    if (!account_reference_number || !referenceid || !tsm || !manager) {
+    if (!id || !referenceid || !tsm || !manager) {
       return NextResponse.json(
         {
           success: false,
-          error: "Missing required fields: account_reference_number, referenceid, or manager",
+          error: "Missing required fields: id, referenceid, tsm, or manager",
         },
         { status: 400 }
       );
@@ -27,9 +27,9 @@ export async function PUT(req: Request) {
       UPDATE accounts
       SET
         referenceid = ${referenceid},
-        manager = ${manager},
-        tsm = ${tsm}
-      WHERE account_reference_number = ${account_reference_number}
+        manager     = ${manager},
+        tsm         = ${tsm}
+      WHERE id = ${id}
       RETURNING id, account_reference_number, referenceid, manager, tsm;
     `;
 
@@ -40,22 +40,17 @@ export async function PUT(req: Request) {
       );
     }
 
-    // Log audit trail for company ticket update
     await logAuditTrailApp(
       req,
       "update",
       "company ticket assignment",
-      account_reference_number,
-      account_reference_number,
+      id,
+      updated[0].account_reference_number ?? String(id),
       `Updated ticket assignment for account`,
       { manager, tsm }
     );
 
-    return NextResponse.json(
-      { success: true, data: updated[0] },
-      { status: 200 }
-    );
-
+    return NextResponse.json({ success: true, data: updated[0] }, { status: 200 });
   } catch (error: any) {
     console.error("Error updating account referenceid and manager:", error);
     return NextResponse.json(
