@@ -139,10 +139,7 @@ export const SPFTable: React.FC<SPFProps> = ({ referenceid, dateCreatedFilterRan
     const totalsRowIndex = worksheet.addRow(totalsRow);
     totalsRowIndex.font = { bold: true };
 
-    const amountCol = worksheet.getColumn('totalAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+worksheet.getColumn('totalAmount').numFmt = '#,##0.00" ₱"';
 
     return workbook;
   };
@@ -180,10 +177,7 @@ export const SPFTable: React.FC<SPFProps> = ({ referenceid, dateCreatedFilterRan
       });
     });
 
-    const amountCol = worksheet.getColumn('soAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+    worksheet.getColumn('soAmount').numFmt = '#,##0.00" ₱"';
 
     return workbook;
   };
