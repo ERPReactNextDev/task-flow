@@ -358,10 +358,7 @@ export const QuotationTable: React.FC<QuotationProps> = ({
       totalsRowIndex.font = { bold: true };
 
       // Format currency column
-      const amountCol = worksheet.getColumn('quotationAmount');
-      if (amountCol && amountCol.number > 0) {
-        amountCol.numFmt = '#,##0.00" ₱"';
-      }
+      worksheet.getColumn('quotationAmount').numFmt = '#,##0.00" ₱"';
 
       // Generate filename with date range
       let filename = "Admin_Quotation_Summary";
