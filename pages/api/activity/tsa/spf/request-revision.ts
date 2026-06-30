@@ -17,9 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const updateData: any = {
             status: "For Revision",
-            date_updated: new Date().toISOString(),
-            spf_revision_approval_sales_status: "Ongoing",
-            spf_revision_approval_sales_date: new Date().toISOString()
+            date_updated: new Date().toISOString()
         };
 
         if (revision_type) updateData.revision_type = revision_type;

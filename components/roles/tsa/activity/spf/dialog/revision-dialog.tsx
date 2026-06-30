@@ -309,7 +309,6 @@ export function RevisionDialog({ open, onClose, spf_number, onRequestRevision }:
     const [items, setItems] = useState<ItemRow[]>([]);
     const [formData, setFormData] = useState<any>({});
     const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
-    const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
     useEffect(() => {
         if (!open || !spf_number) {
@@ -372,7 +371,6 @@ export function RevisionDialog({ open, onClose, spf_number, onRequestRevision }:
             setFormStep(1);
             setFormData({});
             setItems([]);
-            setShowSuccessDialog(false);
         }
     }, [open]);
 
@@ -417,7 +415,7 @@ export function RevisionDialog({ open, onClose, spf_number, onRequestRevision }:
                 item_qty: items.map((it) => it.item_qty).join(","),
             };
             await onRequestRevision(spf_number, selectedType, remarks, editedData);
-            setShowSuccessDialog(true);
+            onClose();
         } catch (err: any) {
             setError(err.message || "Failed to request revision");
         } finally {
@@ -661,18 +659,17 @@ export function RevisionDialog({ open, onClose, spf_number, onRequestRevision }:
     };
 
     return (
-        <>
-            <Dialog open={open} onOpenChange={onClose}>
-                <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden rounded-none">
-                    <div className="bg-amber-600 px-5 py-4">
-                        <DialogTitle className="text-white text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                            <RefreshCw className="w-4 h-4" />
-                            Request Revision
-                        </DialogTitle>
-                        <p className="text-amber-100 text-[11px] mt-0.5">
-                            {spf_number ? `SPF: ${spf_number}` : ""}
-                        </p>
-                    </div>
+        <Dialog open={open} onOpenChange={onClose}>
+            <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden rounded-none">
+                <div className="bg-amber-600 px-5 py-4">
+                    <DialogTitle className="text-white text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4" />
+                        Request Revision
+                    </DialogTitle>
+                    <p className="text-amber-100 text-[11px] mt-0.5">
+                        {spf_number ? `SPF: ${spf_number}` : ""}
+                    </p>
+                </div>
 
                 <ScrollArea className="max-h-[60vh]">
                     <div className="px-5 py-4">
@@ -872,50 +869,5 @@ export function RevisionDialog({ open, onClose, spf_number, onRequestRevision }:
                 </DialogFooter>
             </DialogContent>
         </Dialog>
-
-        {/* Success Dialog */}
-        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-            <DialogContent className="max-w-md p-0 overflow-hidden rounded-none">
-                <div className="bg-emerald-600 px-5 py-4">
-                    <DialogTitle className="text-white text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                        <Check className="w-4 h-4" />
-                        Revision Requested
-                    </DialogTitle>
-                </div>
-                <div className="px-5 py-6">
-                    <div className="flex flex-col items-center text-center space-y-4">
-                        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
-                            <Check className="w-8 h-8 text-emerald-600" />
-                        </div>
-                        <div>
-                            <h3 className="text-base font-bold text-gray-900 mb-2">
-                                Request Revision sent to Product Development (PD) Department.
-                            </h3>
-                            <p className="text-sm text-gray-600 mb-1">
-                                Waiting to be Approved
-                            </p>
-                            <p className="text-sm text-gray-600">
-                                Status: Ongoing
-                            </p>
-                            <p className="text-sm text-gray-500 mt-2">
-                                SPF: {spf_number}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <DialogFooter className="px-5 py-4 border-t border-gray-200 bg-gray-50">
-                    <Button
-                        onClick={() => {
-                            setShowSuccessDialog(false);
-                            onClose();
-                        }}
-                        className="rounded-none h-9 text-xs uppercase font-black tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                        OK
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-        </>
     );
 }
