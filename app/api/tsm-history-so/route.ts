@@ -8,28 +8,34 @@ const supabase = createClient(
 
 const SPF_TYPES = ["spf - special project", "spf - local", "spf - foreign"];
 
+async function getAgentIds(tsm: string): Promise<string[]> {
+  const { data } = await supabase.from("users").select("ReferenceID")
+    .eq("TSM", tsm).eq("Role", "Territory Sales Associate")
+    .not("Status", "in", '("Resigned","Terminated","Inactive")');
+  return (data ?? []).map((a) => a.ReferenceID);
+}
+
 export async function GET(req: Request) {
   try {
-    const Xchire_url  = new URL(req.url);
-    const referenceId = Xchire_url.searchParams.get("referenceid");
-    const from        = Xchire_url.searchParams.get("from");
-    const to          = Xchire_url.searchParams.get("to");
+    const url  = new URL(req.url);
+    const tsm  = url.searchParams.get("tsm");
+    const from = url.searchParams.get("from");
+    const to   = url.searchParams.get("to");
 
-    if (!referenceId) {
-      return NextResponse.json({ success: false, error: "Missing reference ID." }, { status: 400 });
-    }
+    if (!tsm) return NextResponse.json({ success: false, error: "Missing tsm." }, { status: 400 });
+
+    const agentIds = await getAgentIds(tsm);
+    if (agentIds.length === 0)
+      return NextResponse.json({ success: true, total: 0, totalRegular: 0, totalSPF: 0 }, { status: 200 });
 
     const currentYear = new Date().getFullYear().toString();
     const startDate   = from ? `${from}T00:00:00Z` : `${currentYear}-01-01T00:00:00Z`;
     const endDate     = to   ? `${to}T23:59:59Z`   : null;
 
-    let q = supabase
-      .from("history")
-      .select("so_amount, call_type")
-      .eq("referenceid", referenceId)
+    let q = supabase.from("history").select("so_amount, call_type")
+      .in("referenceid", agentIds)
       .eq("status", "SO-Done")
       .gte("date_created", startDate);
-
     if (endDate) q = q.lte("date_created", endDate);
 
     const { data, error } = await q;
@@ -37,23 +43,17 @@ export async function GET(req: Request) {
 
     let totalRegular = 0;
     let totalSPF     = 0;
-
-    data?.forEach(item => {
+    (data ?? []).forEach(item => {
       const amount   = Number(item.so_amount) || 0;
       const callType = (item.call_type || "").toLowerCase();
-      if (SPF_TYPES.includes(callType)) {
-        totalSPF += amount;
-      } else {
-        totalRegular += amount;
-      }
+      if (SPF_TYPES.includes(callType)) totalSPF += amount;
+      else totalRegular += amount;
     });
 
     const total = totalRegular + totalSPF;
-
     return NextResponse.json({ success: true, total, totalRegular, totalSPF }, { status: 200 });
-  } catch (Xchire_error: any) {
-    console.error("Error fetching history so:", Xchire_error);
-    return NextResponse.json({ success: false, error: Xchire_error.message || "Failed to fetch history so." }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
 

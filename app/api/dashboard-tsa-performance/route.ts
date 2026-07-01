@@ -26,8 +26,8 @@ export async function GET(req: Request) {
 
     // Running SI/SO use the range start (or year start if no range)
     const yearStart  = from ? `${from}T00:00:00Z` : `${currentYear}-01-01T00:00:00Z`;
-    // Pipeline / monthly metrics use the range start (or current month start if no range)
-    const monthStart = from ? `${from}T00:00:00Z` : `${currentYear}-${currentMonth}-01T00:00:00Z`;
+    // Pipeline / monthly metrics always use current month start — not affected by date filter
+    const monthStart = `${currentYear}-${currentMonth}-01T00:00:00Z`;
     const rangeEnd   = to   ? `${to}T23:59:59Z`   : null;
 
     // ── All queries run in parallel — no internal API calls ──────────────────
@@ -45,35 +45,31 @@ export async function GET(req: Request) {
       return q;
     })();
     const obQuery = (() => {
-      let q = supabase.from("history").select("id", { count: "exact", head: true })
+      const q = supabase.from("history").select("id", { count: "exact", head: true })
         .eq("referenceid", referenceid).eq("source", "Outbound - Touchbase").gte("date_created", monthStart);
-      if (rangeEnd) q = q.lte("date_created", rangeEnd);
       return q;
     })();
     const quotationsQuery = (() => {
-      let q = supabase.from("history").select("quotation_number", { count: "exact" })
+      const q = supabase.from("history").select("quotation_number", { count: "exact" })
         .eq("referenceid", referenceid).eq("type_activity", "Quotation Preparation")
         .or("tsm_approved_status.eq.Approved By Sales Head,tsm_approved_status.eq.Approved")
         .gte("date_created", monthStart);
-      if (rangeEnd) q = q.lte("date_created", rangeEnd);
       return q;
     })();
     const pipelineQuery = (() => {
-      let q = supabase.from("history").select("activity_reference_number, source, type_activity")
+      const q = supabase.from("history").select("activity_reference_number, source, type_activity")
         .eq("referenceid", referenceid).gte("date_created", monthStart);
-      if (rangeEnd) q = q.lte("date_created", rangeEnd);
       return q;
     })();
 
     // ── Client visits via Supabase tasklog ────────────────────────────────────
     const clientVisitsQuery = (() => {
-      let q = supabase
+      const q = supabase
         .from("tasklog")
         .select("id", { count: "exact", head: true })
         .eq("ReferenceID", referenceid)
         .eq("Status", "Login")
         .gte("date_created", monthStart);
-      if (rangeEnd) q = q.lte("date_created", rangeEnd);
       return q;
     })();
 

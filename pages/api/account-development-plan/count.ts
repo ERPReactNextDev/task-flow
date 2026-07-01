@@ -16,20 +16,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "Reference ID is required" });
     }
 
-    // Calculate date range
-    const now = new Date();
+    // Calculate date range — full current year (YTD)
+    const now        = new Date();
     const targetYear = year ? parseInt(year) : now.getFullYear();
-    const targetMonth = month ? parseInt(month) - 1 : now.getMonth();
-    const monthStart = new Date(targetYear, targetMonth, 1).toISOString().slice(0, 10);
-    const monthEnd = new Date(targetYear, targetMonth + 1, 0).toISOString().slice(0, 10);
+    const yearStart  = `${targetYear}-01-01`;
+    const yearEnd    = `${targetYear}-12-31`;
 
-    // Fetch count from account_development_plans table
+    // Fetch count from account_development_plans table for the full year
     const { data: plans, error: plansError } = await supabase
       .from("account_development_plans")
       .select("id")
       .eq("referenceid", referenceid)
-      .gte("created_at", monthStart)
-      .lte("created_at", monthEnd);
+      .gte("created_at", yearStart)
+      .lte("created_at", yearEnd);
 
     if (plansError) throw plansError;
 

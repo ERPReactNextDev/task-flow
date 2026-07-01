@@ -8,29 +8,29 @@ const supabase = createClient(
 
 export async function GET(req: Request) {
   try {
-    const Xchire_url = new URL(req.url);
+    const Xchire_url  = new URL(req.url);
     const referenceId = Xchire_url.searchParams.get("referenceid");
-    const from = Xchire_url.searchParams.get("from");
-    const to   = Xchire_url.searchParams.get("to");
+    const from        = Xchire_url.searchParams.get("from");
+    const to          = Xchire_url.searchParams.get("to");
 
     if (!referenceId) {
       return NextResponse.json({ success: false, error: "Missing reference ID." }, { status: 400 });
     }
 
     const currentYear = new Date().getFullYear().toString();
-    const startDate = from ? `${from}T00:00:00Z` : `${currentYear}-01-01T00:00:00Z`;
-    const endDate   = to   ? `${to}T23:59:59Z`   : null;
+    const startDate   = from ? `${from}T00:00:00Z` : `${currentYear}-01-01T00:00:00Z`;
+    const endDate     = to   ? `${to}T23:59:59Z`   : null;
 
-    let query = supabase
+    let q = supabase
       .from("history")
       .select("actual_sales")
       .eq("referenceid", referenceId)
       .eq("type_activity", "Delivered / Closed Transaction")
       .gte("date_created", startDate);
 
-    if (endDate) query = query.lte("date_created", endDate);
+    if (endDate) q = q.lte("date_created", endDate);
 
-    const { data, error } = await query;
+    const { data, error } = await q;
     if (error) throw error;
 
     const total = data?.reduce((sum, item) => sum + (Number(item.actual_sales) || 0), 0) || 0;
@@ -42,4 +42,4 @@ export async function GET(req: Request) {
   }
 }
 
-export const dynamic = "force-dynamic"; // Always fetch latest data
+export const dynamic = "force-dynamic";
