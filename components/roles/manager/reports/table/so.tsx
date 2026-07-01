@@ -351,10 +351,7 @@ export const SOTable: React.FC<SOProps> = ({
     const totalsRowIndex = worksheet.addRow(totalsRow);
     totalsRowIndex.font = { bold: true };
 
-    const amountCol = worksheet.getColumn('totalSOAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+    worksheet.getColumn('totalSOAmount').numFmt = '#,##0.00" ₱"';
 
     return workbook;
   };
@@ -418,10 +415,7 @@ export const SOTable: React.FC<SOProps> = ({
       });
     });
 
-    const amountCol = worksheet.getColumn('soAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+worksheet.getColumn('soAmount').numFmt = '#,##0.00" ₱"';
 
     return workbook;
   };

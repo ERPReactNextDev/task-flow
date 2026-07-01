@@ -185,10 +185,7 @@ export const FBTable: React.FC<FBProps> = ({ referenceid, dateCreatedFilterRange
       totalsRowIndex.font = { bold: true };
 
       // Format currency column
-      const amountCol = worksheet.getColumn('totalSales');
-      if (amountCol && amountCol.number > 0) {
-        amountCol.numFmt = '#,##0.00" ₱"';
-      }
+      worksheet.getColumn('totalSales').numFmt = '#,##0.00" ₱"';
 
       // Generate filename with date range
       let filename = "Admin_FB_Summary";

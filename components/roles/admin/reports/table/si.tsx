@@ -312,10 +312,7 @@ export const SITable: React.FC<SIProps> = ({ referenceid, dateCreatedFilterRange
       totalsRowIndex.font = { bold: true };
 
       // Format currency column
-      const amountCol = worksheet.getColumn('totalSIAmount');
-      if (amountCol && amountCol.number > 0) {
-        amountCol.numFmt = '#,##0.00" ₱"';
-      }
+      worksheet.getColumn('totalSIAmount').numFmt = '#,##0.00" ₱"';
 
       // Generate filename with date range
       let filename = "Admin_Sales_Invoice_Summary";

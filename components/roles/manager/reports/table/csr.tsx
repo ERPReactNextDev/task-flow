@@ -378,10 +378,7 @@ export const CSRTable: React.FC<CSRProps> = ({ referenceid, dateCreatedFilterRan
       });
     });
 
-    const amountCol = worksheet.getColumn('quotationAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+    worksheet.getColumn('quotationAmount').numFmt = '#,##0.00" ₱"';
 
     return workbook;
   };

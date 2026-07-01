@@ -380,10 +380,7 @@ export const QuotationTable: React.FC<QuotationProps> = ({
     const totalsRowIndex = worksheet.addRow(totalsRow);
     totalsRowIndex.font = { bold: true };
 
-    const amountCol = worksheet.getColumn('quotationAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+      worksheet.getColumn('quotationAmount').numFmt = '#,##0.00" ₱"';
     return workbook;
   };
 
@@ -452,10 +449,7 @@ export const QuotationTable: React.FC<QuotationProps> = ({
       });
     });
 
-    const amountCol = worksheet.getColumn('quotationAmount');
-    if (amountCol && amountCol.number > 0) {
-      amountCol.numFmt = '#,##0.00" ₱"';
-    }
+    worksheet.getColumn('quotationAmount').numFmt = '#,##0.00" ₱"';
 
     return workbook;
   };
